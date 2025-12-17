@@ -942,7 +942,10 @@ return {
 
       for(let d=start.getTime(); d<x.max; d+=oneDay){
         const from=x.getPixelForValue(d), to=x.getPixelForValue(d+oneDay);
-        ctx.fillStyle=toggle? (getCSSVar('--accent-muted')||'rgba(255,112,67,0.12)') : 'rgba(0,0,0,0.02)';
+        ctx.fillStyle = toggle
+  ? 'rgba(255,112,67,0.06)'   // 👈 bande jour très légère
+  : '#ffffff';               // 👈 on ne touche pas au blanc
+
         ctx.fillRect(from, chartArea.top, to-from, chartArea.bottom-chartArea.top);
         toggle=!toggle;
       }
@@ -2720,6 +2723,7 @@ function showConfirm(message, onConfirm) {
   
 </body>
 </html>
+
 
 
 
