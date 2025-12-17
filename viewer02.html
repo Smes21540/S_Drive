@@ -1125,6 +1125,35 @@ const notesPlugin = {
       const rx = x + 6;
       const ry = y - boxH - 8;
 
+
+
+// 🔹 Trait + point d'ancrage
+const ax = x, ay = y;
+const bx = rx; 
+const by = ry + boxH * 0.75;
+
+ctx.strokeStyle = n.color || "#ff7043";
+ctx.lineWidth = 1;
+ctx.beginPath();
+ctx.moveTo(ax, ay);
+ctx.lineTo(bx, by);
+ctx.stroke();
+
+// Point rond sur la courbe
+ctx.fillStyle = n.color || "#ff7043";
+ctx.beginPath();
+ctx.arc(ax, ay, 3.5, 0, Math.PI * 2);
+ctx.fill();
+
+// Petit contour blanc pour détacher du fond/courbe
+ctx.strokeStyle = "#ffffff";
+ctx.lineWidth = 2;
+ctx.beginPath();
+ctx.arc(ax, ay, 3.5, 0, Math.PI * 2);
+ctx.stroke();
+
+
+      
       // fond couleur complète
       ctx.fillStyle = n.color || "#ff7043";
       ctx.beginPath();
@@ -2723,6 +2752,7 @@ function showConfirm(message, onConfirm) {
   
 </body>
 </html>
+
 
 
 
