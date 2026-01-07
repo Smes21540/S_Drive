@@ -155,40 +155,33 @@ function isCsvOrText(contentType = "", name = "") {
 // Décode un CSV "smart":
 // - BOM UTF-8 => UTF-8
 // - sinon UTF-8, et si beaucoup de � (U+FFFD) => fallback windows-1252 (souvent les historiques)
-function looksLikeMojibake(s) {
-  // UTF-8 lu comme Latin-1 / Windows-1252
-  return (
-    /Ã./.test(s) ||                 // Ã© Ã¨ Ãª Ã« ...
-    /Â./.test(s) ||                 // Â° Âµ ...
-    /â€™|â€œ|â€|â€“|â€”|â€¦/.test(s) // apostrophes/quotes/dashes
-  );
+function countMatches(str, re) {
+  const m = str.match(re);
+  return m ? m.length : 0;
+}
+
+function scoreDecodedText(s) {
+  // Plus le score est bas, mieux c’est.
+  const replacement = countMatches(s, /\uFFFD/g);
+  const mojibake = countMatches(s, /Ã.|Â.|â€™|â€œ|â€|â€“|â€”|â€¦/g);
+  const controls = countMatches(s, /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g);
+  return (replacement * 100) + (mojibake * 10) + (controls * 3);
 }
 
 function decodeCsvSmart(arrayBuf) {
   const u8 = new Uint8Array(arrayBuf);
 
-  // 1) BOM UTF-8 => UTF-8 direct
+  // BOM UTF-8 => UTF-8 direct
   if (u8.length >= 3 && u8[0] === 0xef && u8[1] === 0xbb && u8[2] === 0xbf) {
     return new TextDecoder("utf-8").decode(u8);
   }
 
-  // 2) Essai UTF-8
   const utf8 = new TextDecoder("utf-8").decode(u8);
+  const win1252 = new TextDecoder("windows-1252").decode(u8);
 
-  // 3) Si des caractères de remplacement => pas UTF-8
-  const replacementCount = (utf8.match(/\uFFFD/g) || []).length;
-  if (replacementCount >= 2) {
-    return new TextDecoder("windows-1252").decode(u8);
-  }
-
-  // 4) Si mojibake détecté => décodage win-1252
-  if (looksLikeMojibake(utf8)) {
-    const win = new TextDecoder("windows-1252").decode(u8);
-    if (!looksLikeMojibake(win)) return win;
-  }
-
-  return utf8;
+  return scoreDecodedText(utf8) <= scoreDecodedText(win1252) ? utf8 : win1252;
 }
+
 
 
 /* =========================
