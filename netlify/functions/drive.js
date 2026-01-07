@@ -386,6 +386,46 @@ export async function handler(event) {
       });
     }
 
+     // CSV/texte -> décodage + correction mojibake (Ã© etc.) puis renvoi en UTF-8
+if (isCsvOrText(contentType, name)) {
+  const arrayBuf = await res.arrayBuffer();
+  const text = decodeCsvSmart(arrayBuf);
+
+  const fixed = text
+    .replace(/Ã©/g, "é")
+    .replace(/Ã¨/g, "è")
+    .replace(/Ãª/g, "ê")
+    .replace(/Ã /g, "à")
+    .replace(/Ã¹/g, "ù")
+    .replace(/Ã´/g, "ô")
+    .replace(/Ã®/g, "î")
+    .replace(/Ã¯/g, "ï")
+    .replace(/Ã§/g, "ç")
+    .replace(/Â°/g, "°")
+    .replace(/â€™/g, "’")
+    .replace(/â€œ/g, "“")
+    .replace(/â€/g, "”")
+    .replace(/â€“/g, "–")
+    .replace(/â€”/g, "—")
+    .replace(/â€¦/g, "…");
+
+  // On renvoie toujours en UTF-8 côté client
+  const forcedType = name.toLowerCase().endsWith(".csv")
+    ? "text/csv; charset=utf-8"
+    : (contentType.includes("charset") ? contentType : `${contentType}; charset=utf-8`);
+
+  return respond(allowOrigin, {
+    statusCode: 200,
+    headers: {
+      "Content-Type": forcedType,
+      "Cache-Control": `public, max-age=${cacheSeconds}, must-revalidate`,
+      "Netlify-CDN-Cache-Control": `public, max-age=${cacheSeconds}, must-revalidate`,
+    },
+    body: fixed,
+  });
+}
+
+
     // Binaire -> base64
     const arrayBuf = await res.arrayBuffer();
     return {
