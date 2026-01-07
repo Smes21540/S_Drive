@@ -155,25 +155,41 @@ function isCsvOrText(contentType = "", name = "") {
 // Décode un CSV "smart":
 // - BOM UTF-8 => UTF-8
 // - sinon UTF-8, et si beaucoup de � (U+FFFD) => fallback windows-1252 (souvent les historiques)
+function looksLikeMojibake(s) {
+  // UTF-8 lu comme Latin-1 / Windows-1252
+  return (
+    /Ã./.test(s) ||                 // Ã© Ã¨ Ãª Ã« ...
+    /Â./.test(s) ||                 // Â° Âµ ...
+    /â€™|â€œ|â€|â€“|â€”|â€¦/.test(s) // apostrophes/quotes/dashes
+  );
+}
+
 function decodeCsvSmart(arrayBuf) {
   const u8 = new Uint8Array(arrayBuf);
 
-  const hasUtf8Bom = u8.length >= 3 && u8[0] === 0xef && u8[1] === 0xbb && u8[2] === 0xbf;
-  if (hasUtf8Bom) {
+  // 1) BOM UTF-8 => UTF-8 direct
+  if (u8.length >= 3 && u8[0] === 0xef && u8[1] === 0xbb && u8[2] === 0xbf) {
     return new TextDecoder("utf-8").decode(u8);
   }
 
+  // 2) Essai UTF-8
   const utf8 = new TextDecoder("utf-8").decode(u8);
-  const replacementCount = (utf8.match(/\uFFFD/g) || []).length;
 
-  // Seuil simple: si ça remplace plusieurs caractères, c'est probablement pas de l'UTF-8
+  // 3) Si des caractères de remplacement => pas UTF-8
+  const replacementCount = (utf8.match(/\uFFFD/g) || []).length;
   if (replacementCount >= 2) {
-    // Fallback: windows-1252 (encodage très courant de CSV historiques)
     return new TextDecoder("windows-1252").decode(u8);
+  }
+
+  // 4) Si mojibake détecté => décodage win-1252
+  if (looksLikeMojibake(utf8)) {
+    const win = new TextDecoder("windows-1252").decode(u8);
+    if (!looksLikeMojibake(win)) return win;
   }
 
   return utf8;
 }
+
 
 /* =========================
    Handler
