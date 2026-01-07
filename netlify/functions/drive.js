@@ -1,7 +1,11 @@
 // netlify/functions/drive.js (Node 18+)
 // Proxy Google Drive via Service Account (LIST / DOWNLOAD / UPLOAD)
 // Objectif: stabilité (timeouts/retry) + CORS stable + token cache
-// Texte/CSV: détection encodage (BOM + test UTF-8) puis conversion => UTF-8 (sans "marteau" mojibake)
+// Texte/CSV: détection encodage (BOM + test UTF-8) puis fallback windows-1252 => renvoi UTF-8
+// CSV: ajoute un BOM UTF-8 pour Excel (optionnel mais fortement recommandé)
+//
+// Dépendance:
+//   npm i iconv-lite
 //
 // Vars Netlify:
 // - GOOGLE_SERVICE_ACCOUNT_JSON (JSON complet service account)
@@ -48,7 +52,10 @@ function corsHeaders(allowOrigin) {
 function respond(allowOrigin, { statusCode = 200, headers = {}, body = "" }) {
   return {
     statusCode,
-    headers: { ...corsHeaders(allowOrigin), ...headers },
+    headers: {
+      ...corsHeaders(allowOrigin),
+      ...headers,
+    },
     body,
   };
 }
@@ -92,6 +99,7 @@ async function fetchWithRetry(
     } catch (e) {
       lastErr = e;
     }
+
     const jitter = Math.random() * 120;
     await new Promise((r) => setTimeout(r, baseDelayMs * 2 ** i + jitter));
   }
@@ -151,11 +159,11 @@ function isCsvOrText(contentType = "", name = "") {
   );
 }
 
-// Détection simple & fiable :
+// Détection & décodage robuste:
 // - UTF-8 BOM => utf8
-// - UTF-16 BOM => utf16le/utf16be
-// - sinon: tenter UTF-8 strict-ish (surrogates/�) puis fallback win1252
-function decodeToUtf8String(arrayBuf) {
+// - UTF-16 BOM => utf16le / utf16be
+// - sinon: tente UTF-8, si U+FFFD -> fallback win1252 (ton cas typique)
+function decodeTextSmart(arrayBuf) {
   const buf = Buffer.from(arrayBuf);
 
   // UTF-8 BOM
@@ -170,28 +178,28 @@ function decodeToUtf8String(arrayBuf) {
 
   // UTF-16 BE BOM
   if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) {
-    // iconv-lite gère utf16-be via "utf16-be"
     return iconv.decode(buf.slice(2), "utf16-be");
   }
 
-  // Tentative UTF-8
   const utf8 = buf.toString("utf8");
-
-  // Heuristique: si on a des � (U+FFFD) c’est souvent du CP1252/Latin1 lu en UTF-8
-  // (ou du vrai binaire, mais ici on n'appelle ça que pour texte/CSV)
-  const replacementCount = (utf8.match(/\uFFFD/g) || []).length;
-  if (replacementCount > 0) {
+  if (utf8.includes("\uFFFD")) {
     return iconv.decode(buf, "win1252"); // windows-1252
   }
-
   return utf8;
 }
 
-function ensureCharsetUtf8(contentType, name) {
+function ensureCharsetUtf8(contentType = "", name = "") {
   const n = (name || "").toLowerCase();
   if (n.endsWith(".csv")) return "text/csv; charset=utf-8";
   const ct = contentType || "text/plain";
   return ct.toLowerCase().includes("charset=") ? ct : `${ct}; charset=utf-8`;
+}
+
+// Excel aime le BOM UTF-8 sur les CSV
+function shouldAddBom(name = "", contentType = "") {
+  const n = (name || "").toLowerCase();
+  const ct = (contentType || "").toLowerCase();
+  return n.endsWith(".csv") || ct.includes("csv");
 }
 
 /* =========================
@@ -232,7 +240,10 @@ export async function handler(event) {
   /* =========================
      POST upload
      Body JSON:
-     { upload:true, parentId, name, content, mimeType? }
+       { upload:true, parentId, name, content, mimeType? }
+     Notes:
+       - content doit être une string UTF-8 (côté front, lis correctement le fichier)
+       - on force charset=utf-8 sur la partie "fichier" si c'est du texte
      ========================= */
   if (method === "POST") {
     try {
@@ -241,16 +252,21 @@ export async function handler(event) {
         return respond(allowOrigin, { statusCode: 400, body: "Paramètres manquants pour upload" });
       }
 
-      // Pour éviter les surprises: si c'est CSV/texte, impose UTF-8 dans le Content-Type de la partie "fichier"
-      const rawMime = body.mimeType || (String(body.name).toLowerCase().endsWith(".csv") ? "text/csv" : "text/plain");
-      const filePartMime = rawMime.toLowerCase().startsWith("text/") && !rawMime.toLowerCase().includes("charset=")
-        ? `${rawMime}; charset=utf-8`
-        : rawMime;
+      const name = String(body.name);
+      const baseMime =
+        body.mimeType ||
+        (name.toLowerCase().endsWith(".csv") ? "text/csv" : "text/plain");
+
+      // Pour la partie fichier (multipart), ajoute charset=utf-8 si texte
+      const filePartMime =
+        baseMime.toLowerCase().startsWith("text/") && !baseMime.toLowerCase().includes("charset=")
+          ? `${baseMime}; charset=utf-8`
+          : baseMime;
 
       const metadata = {
-        name: body.name,
+        name,
         parents: [body.parentId],
-        mimeType: rawMime, // Drive mimeType (sans charset), c'est OK
+        mimeType: baseMime, // mimeType Drive (sans charset), ok
       };
 
       const boundary = "-------smesuploadboundary" + Date.now();
@@ -265,7 +281,10 @@ export async function handler(event) {
 
       const uploadUrl =
         "https://www.googleapis.com/upload/drive/v3/files?" +
-        new URLSearchParams({ uploadType: "multipart", supportsAllDrives: "true" }).toString();
+        new URLSearchParams({
+          uploadType: "multipart",
+          supportsAllDrives: "true",
+        }).toString();
 
       const res = await fetchWithRetry(
         uploadUrl,
@@ -287,7 +306,12 @@ export async function handler(event) {
       }
 
       let out = {};
-      try { out = JSON.parse(txt); } catch {}
+      try {
+        out = JSON.parse(txt);
+      } catch {
+        /* ignore */
+      }
+
       return respond(allowOrigin, {
         statusCode: 200,
         headers: { "Content-Type": "application/json" },
@@ -301,6 +325,10 @@ export async function handler(event) {
 
   /* =========================
      GET list / download
+     Query:
+       - id=... (obligatoire)
+       - list=true pour lister un dossier
+       - name=... (optionnel, pour cache & heuristiques)
      ========================= */
   try {
     const qp = event.queryStringParameters || {};
@@ -310,10 +338,10 @@ export async function handler(event) {
 
     if (!id) return respond(allowOrigin, { statusCode: 400, body: "Missing id parameter" });
 
-    // LIST dossier (pagination) — évite 500/timeouts quand il y a beaucoup de fichiers
+    // LIST dossier (pagination) => évite 500/timeout si énormément de fichiers
     if (list) {
       const pageSize = 1000;
-      const maxPages = 20; // sécurité anti-boucle infinie
+      const maxPages = 25; // garde-fou
       const q = `'${id}' in parents and trashed=false`;
 
       let files = [];
@@ -380,10 +408,16 @@ export async function handler(event) {
 
     const contentType = res.headers.get("content-type") || "application/octet-stream";
 
-    // CSV/texte => conversion sûre vers UTF-8, pas de "mojibake fix" destructif
+    // CSV/texte => decode smart, renvoi UTF-8 (BOM CSV)
     if (isCsvOrText(contentType, name)) {
       const arrayBuf = await res.arrayBuffer();
-      const text = decodeToUtf8String(arrayBuf);
+      let text = decodeTextSmart(arrayBuf);
+
+      // BOM UTF-8 pour Excel sur CSV
+      if (shouldAddBom(name, contentType)) {
+        const bom = "\uFEFF";
+        if (!text.startsWith(bom)) text = bom + text;
+      }
 
       return respond(allowOrigin, {
         statusCode: 200,
@@ -418,6 +452,7 @@ export async function handler(event) {
         body: JSON.stringify({ error: "Timeout Google Drive" }),
       });
     }
+
     console.error("Erreur proxy Drive (GET):", e);
     return respond(allowOrigin, { statusCode: 500, body: "Erreur interne proxy Drive" });
   }
