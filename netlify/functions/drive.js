@@ -1,265 +1,397 @@
 // drive.js — Netlify Function (Node 18+)
-// Lecture & upload Google Drive via Service Account, CORS stable, stateless, retries.
-// Vars requises côté Netlify: GOOGLE_SERVICE_ACCOUNT_JSON (JSON complet) et facultatif: DOMAINS_ALLOWED (CSV)
+// Proxy Google Drive via Service Account : LIST + DOWNLOAD + UPLOAD
+// Robuste: CORS OK, OPTIONS, token cache, timeout réseau, retries intelligents, CSV en texte (pas base64).
 
 import { google } from "googleapis";
 
 /* =========================
-   Utils: CORS & Retry
+   CORS
    ========================= */
 
-function parseAllowedOrigins(originHeader) {
-  // 1) Origines codées en dur (mets tes domaines ici)
+function allowedOriginsList() {
   const hardcoded = [
     "https://smes21540.github.io",
     "https://smes21540.netlify.app",
-    // Ajoute tes domaines personnalisés ci-dessous :
-    "https://app.tondomaine.fr",
-    "https://www.tondomaine.fr",
     // Dev local si besoin :
     "http://localhost:5173",
     "http://localhost:3000",
   ];
 
-  // 2) Origines supplémentaires via variable d'env DOMAINS_ALLOWED (CSV)
   const extra = (process.env.DOMAINS_ALLOWED || "")
     .split(",")
-    .map(s => s.trim())
+    .map((s) => s.trim())
     .filter(Boolean);
 
-  const list = Array.from(new Set([...hardcoded, ...extra]));
-  const origin = originHeader || "";
-  // Si l'origine de la requête est dans la liste, on la renvoie ; sinon on renvoie le premier domaine autorisé
-  const allowOrigin = list.includes(origin) ? origin : (list[0] || "*");
-  return allowOrigin;
+  return Array.from(new Set([...hardcoded, ...extra]));
 }
 
-function corsResponse({ statusCode = 200, body = "", headers = {} }, allowOrigin) {
+function getAllowOrigin(originHeader) {
+  const list = allowedOriginsList();
+  const origin = originHeader || "";
+  return list.includes(origin) ? origin : (list[0] || "*");
+}
+
+function corsHeaders(allowOrigin) {
   return {
-    statusCode,
-    headers: {
-      "Access-Control-Allow-Origin": allowOrigin,
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
-      "Access-Control-Max-Age": "600", // 10 min: préflight cache côté navigateur
-      ...headers,
-    },
-    body
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
+    "Access-Control-Max-Age": "600",
+    // optionnel, utile si tu fais du cookies/auth navigateur (sinon laisse commenté)
+    // "Access-Control-Allow-Credentials": "true",
   };
 }
 
-async function fetchWithRetry(url, options, { attempts = 4, baseDelayMs = 250 } = {}) {
-  let lastErr, res;
+function withCors({ statusCode = 200, headers = {}, body = "" }, allowOrigin) {
+  return {
+    statusCode,
+    headers: {
+      ...corsHeaders(allowOrigin),
+      ...headers,
+    },
+    body,
+  };
+}
+
+/* =========================
+   Fetch: timeout + retry
+   ========================= */
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+/**
+ * Retries légers : on évite de transformer une latence en 504 Netlify.
+ * - OK pour LIST et UPLOAD (petites réponses)
+ * - Très limité pour DOWNLOAD (alt=media)
+ */
+async function fetchWithRetry(
+  url,
+  options,
+  {
+    attempts = 3,
+    baseDelayMs = 200,
+    timeoutMs = 8000,
+    retryStatuses = [429, 500, 502, 503],
+  } = {}
+) {
+  let lastErr;
+  let res;
+
   for (let i = 0; i < attempts; i++) {
     try {
-      res = await fetch(url, options);
-      // Retry sur 429 et 5xx
-      if (res.ok || ![429, 500, 502, 503, 504].includes(res.status)) return res;
+      res = await fetchWithTimeout(url, options, timeoutMs);
+      if (res.ok) return res;
+      if (!retryStatuses.includes(res.status)) return res;
     } catch (e) {
       lastErr = e;
     }
+
     const jitter = Math.random() * 100;
-    await new Promise(r => setTimeout(r, baseDelayMs * 2 ** i + jitter));
+    await new Promise((r) => setTimeout(r, baseDelayMs * 2 ** i + jitter));
   }
+
   if (!res) throw lastErr || new Error("fetchWithRetry: unknown error");
   return res;
 }
 
 /* =========================
-   Auth: Service Account
+   Auth: Service Account (avec cache)
    ========================= */
 
+let cachedToken = null;
+let cachedTokenExpMs = 0;
+
 async function getAccessTokenFromServiceAccount() {
-  try {
-    const json = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-    if (!json) throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON manquant");
-    const serviceJson = JSON.parse(json);
+  const now = Date.now();
+  if (cachedToken && now < cachedTokenExpMs - 30_000) return cachedToken;
 
-    const auth = new google.auth.GoogleAuth({
-      credentials: serviceJson,
-      scopes: ["https://www.googleapis.com/auth/drive"]
-    });
+  const json = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  if (!json) throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON manquant");
+  const serviceJson = JSON.parse(json);
 
-    const client = await auth.getClient();
-    const token = await client.getAccessToken();
-    return token.token;
-  } catch (err) {
-    console.error("Erreur génération token service account:", err);
-    return null;
-  }
+  const auth = new google.auth.GoogleAuth({
+    credentials: serviceJson,
+    scopes: ["https://www.googleapis.com/auth/drive"],
+  });
+
+  const client = await auth.getClient();
+  const tokenResponse = await client.getAccessToken();
+  const token = tokenResponse?.token;
+
+  if (!token) throw new Error("Token Drive vide");
+
+  cachedToken = token;
+  // token Google ~ 1h (on prend 55 min par sécurité)
+  cachedTokenExpMs = now + 55 * 60 * 1000;
+
+  return cachedToken;
 }
 
 /* =========================
-   Handler Netlify
+   Utils: cache policy
    ========================= */
 
-export async function handler(event, context) {
+function computeCacheSeconds(fileName = "") {
+  // Petit cache si fichier du jour, plus long sinon
+  const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  return fileName.includes(today) ? 60 : 3600;
+}
+
+function isProbablyText(contentType = "") {
+  const ct = contentType.toLowerCase();
+  return (
+    ct.includes("text/") ||
+    ct.includes("application/json") ||
+    ct.includes("application/xml") ||
+    ct.includes("application/csv") ||
+    ct.includes("application/vnd.ms-excel") ||
+    ct.includes("application/octet-stream") // parfois Drive met octet-stream même pour CSV
+  );
+}
+
+/* =========================
+   Handler
+   ========================= */
+
+export async function handler(event) {
   const method = event.httpMethod || "GET";
   const originHeader = event.headers?.origin || event.headers?.Origin || "";
-  const allowOrigin = parseAllowedOrigins(originHeader);
+  const allowOrigin = getAllowOrigin(originHeader);
 
-  // Préflight CORS
+  // Préflight
   if (method === "OPTIONS") {
-    return corsResponse({
-      statusCode: 200,
-      headers: {
-        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-        "Pragma": "no-cache",
-        "Expires": "0"
-      }
-    }, allowOrigin);
+    return withCors(
+      {
+        statusCode: 204,
+        headers: {
+          "Cache-Control": "no-store",
+        },
+        body: "",
+      },
+      allowOrigin
+    );
   }
 
-  // Upload (POST)
+  // Méthodes supportées
+  if (method !== "GET" && method !== "POST") {
+    return withCors(
+      {
+        statusCode: 405,
+        headers: { Allow: "GET, POST, OPTIONS" },
+        body: "Méthode non autorisée",
+      },
+      allowOrigin
+    );
+  }
+
+  // Token
+  let token;
+  try {
+    token = await getAccessTokenFromServiceAccount();
+  } catch (e) {
+    console.error("Auth Service Account échouée:", e);
+    return withCors({ statusCode: 500, body: "Auth Service Account échouée" }, allowOrigin);
+  }
+
+  /* =========================
+     POST: Upload multipart
+     Body attendu JSON:
+     { upload:true, parentId, name, content, mimeType? }
+     ========================= */
   if (method === "POST") {
     try {
       const body = JSON.parse(event.body || "{}");
-      if (!body.upload || !body.parentId || !body.name || !body.content) {
-        return corsResponse({ statusCode: 400, body: "Paramètres manquants pour upload" }, allowOrigin);
-      }
-
-      const token = await getAccessTokenFromServiceAccount();
-      if (!token) {
-        return corsResponse({ statusCode: 500, body: "Impossible de générer un token Drive" }, allowOrigin);
+      if (!body.upload || !body.parentId || !body.name || typeof body.content !== "string") {
+        return withCors({ statusCode: 400, body: "Paramètres manquants pour upload" }, allowOrigin);
       }
 
       const metadata = {
         name: body.name,
         parents: [body.parentId],
-        mimeType: body.mimeType || "text/plain"
+        mimeType: body.mimeType || "text/plain",
       };
 
       const boundary = "-------smesuploadboundary" + Date.now();
       const multipartBody =
         `--${boundary}\r\n` +
-        "Content-Type: application/json; charset=UTF-8\r\n\r\n" +
-        JSON.stringify(metadata) + "\r\n" +
-        `--${boundary}\r\n` +
+        `Content-Type: application/json; charset=UTF-8\r\n\r\n` +
+        JSON.stringify(metadata) +
+        `\r\n--${boundary}\r\n` +
         `Content-Type: ${metadata.mimeType}\r\n\r\n` +
-        body.content + "\r\n" +
-        `--${boundary}--`;
+        body.content +
+        `\r\n--${boundary}--`;
 
-      const uploadUrl = "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true";
+      const uploadUrl =
+        "https://www.googleapis.com/upload/drive/v3/files?" +
+        new URLSearchParams({
+          uploadType: "multipart",
+          supportsAllDrives: "true",
+        }).toString();
 
       const res = await fetchWithRetry(uploadUrl, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
-          "Content-Type": `multipart/related; boundary=${boundary}`
+          "Content-Type": `multipart/related; boundary=${boundary}`,
         },
-        body: multipartBody
+        body: multipartBody,
+      }, {
+        attempts: 3,
+        timeoutMs: 10000,
+        retryStatuses: [429, 500, 502, 503],
       });
 
+      const txt = await res.text().catch(() => "");
       if (!res.ok) {
-        const errTxt = await res.text().catch(() => "");
-        console.error("Erreur upload:", res.status, errTxt);
-        return corsResponse({ statusCode: res.status, body: "Erreur upload Drive" }, allowOrigin);
+        console.error("Erreur upload:", res.status, txt);
+        return withCors({ statusCode: res.status, body: "Erreur upload Drive" }, allowOrigin);
       }
 
-      const result = await res.json();
-      return corsResponse({
-        statusCode: 200,
-        headers: {
-          "Content-Type": "application/json",
-          // Active aussi le cache CDN Netlify (lecture utile seulement ; ici upload → pas de cache)
-        },
-        body: JSON.stringify({ success: true, id: result.id })
-      }, allowOrigin);
+      let json = {};
+      try { json = JSON.parse(txt); } catch { /* ignore */ }
 
-    } catch (err) {
-      console.error("Erreur upload proxy:", err);
-      return corsResponse({ statusCode: 500, body: "Erreur interne upload" }, allowOrigin);
+      return withCors(
+        {
+          statusCode: 200,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ success: true, id: json.id }),
+        },
+        allowOrigin
+      );
+    } catch (e) {
+      console.error("Erreur upload proxy:", e);
+      return withCors({ statusCode: 500, body: "Erreur interne upload" }, allowOrigin);
     }
   }
 
-  // Lecture (GET): list=bool pour lister un dossier ; sinon téléchargement d'un fichier
-  if (method === "GET") {
-    try {
-      const qp = event.queryStringParameters || {};
-      const id = qp.id;
-      const name = qp.name || "";
-      const list = String(qp.list || "").toLowerCase() === "true";
+  /* =========================
+     GET:
+     - list=true&id=<folderId> : liste du dossier
+     - sinon: download fichier id=<fileId>&name=<filename>
+     ========================= */
+  try {
+    const qp = event.queryStringParameters || {};
+    const id = qp.id;
+    const name = qp.name || "";
+    const list = String(qp.list || "").toLowerCase() === "true";
 
-      if (!id) {
-        return corsResponse({ statusCode: 400, body: "Missing id parameter" }, allowOrigin);
+    if (!id) {
+      return withCors({ statusCode: 400, body: "Missing id parameter" }, allowOrigin);
+    }
+
+    // LIST dossier
+    if (list) {
+      const q = `'${id}' in parents and trashed=false`;
+      const url =
+        "https://www.googleapis.com/drive/v3/files?" +
+        new URLSearchParams({
+          q,
+          fields: "files(id,name,mimeType,size,createdTime,modifiedTime)",
+          supportsAllDrives: "true",
+          includeItemsFromAllDrives: "true",
+          pageSize: "1000",
+        }).toString();
+
+      const res = await fetchWithRetry(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      }, {
+        attempts: 3,
+        timeoutMs: 8000,
+        retryStatuses: [429, 500, 502, 503],
+      });
+
+      const dataText = await res.text().catch(() => "{}");
+      if (!res.ok) {
+        console.error("Erreur list Drive:", res.status, dataText);
+        return withCors({ statusCode: res.status, body: "Erreur Google Drive (list)" }, allowOrigin);
       }
 
-      const token = await getAccessTokenFromServiceAccount();
-      if (!token) {
-        return corsResponse({ statusCode: 500, body: "Auth Service Account échouée" }, allowOrigin);
-      }
-
-      if (list) {
-        // Liste des fichiers d'un dossier
-        const url =
-          `https://www.googleapis.com/drive/v3/files` +
-          `?q='${encodeURIComponent(id)}'+in+parents+and+trashed=false` +
-          `&fields=files(id,name,mimeType,size,createdTime,modifiedTime)` +
-          `&supportsAllDrives=true`;
-
-        const response = await fetchWithRetry(url, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-
-        const data = await response.json().catch(() => ({}));
-
-        return corsResponse({
-          statusCode: response.ok ? 200 : response.status,
+      return withCors(
+        {
+          statusCode: 200,
           headers: {
             "Content-Type": "application/json",
-            // Cache light côté CDN & navigateur
             "Cache-Control": "public, max-age=30, must-revalidate",
             "Netlify-CDN-Cache-Control": "public, max-age=30, must-revalidate",
           },
-          body: JSON.stringify(data)
-        }, allowOrigin);
-      }
-
-      // Téléchargement d'un fichier
-      const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?alt=media&supportsAllDrives=true`;
-      const response = await fetchWithRetry(url, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      if (!response.ok) {
-        const errTxt = await response.text().catch(() => "");
-        console.error("Erreur Google Drive GET:", response.status, errTxt);
-        return corsResponse({ statusCode: response.status, body: "Erreur Google Drive" }, allowOrigin);
-      }
-
-      const arrayBuf = await response.arrayBuffer();
-      const contentType = response.headers.get("content-type") || "application/octet-stream";
-
-      // Cache court pour les fichiers "du jour"
-      const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-      const isTodayFile = name.includes(today);
-      const cacheSeconds = isTodayFile ? 60 : 3600;
-
-      // Binaire encodé en Base64 (format Netlify)
-      return {
-        statusCode: 200,
-        headers: {
-          "Access-Control-Allow-Origin": allowOrigin,
-          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
-          "Access-Control-Max-Age": "600",
-          "Content-Type": contentType,
-          "Cache-Control": `public, max-age=${cacheSeconds}, must-revalidate`,
-          "Netlify-CDN-Cache-Control": `public, max-age=${cacheSeconds}, must-revalidate`,
+          body: dataText,
         },
-        body: Buffer.from(arrayBuf).toString("base64"),
-        isBase64Encoded: true
-      };
-    } catch (err) {
-      console.error("Erreur proxy Drive (GET):", err);
-      return corsResponse({ statusCode: 500, body: "Erreur interne proxy Drive" }, allowOrigin);
+        allowOrigin
+      );
     }
-  }
 
-  // Méthodes non supportées
-  return corsResponse({
-    statusCode: 405,
-    headers: { "Allow": "GET, POST, OPTIONS" },
-    body: "Méthode non autorisée"
-  }, allowOrigin);
+    // DOWNLOAD fichier
+    const cacheSeconds = computeCacheSeconds(name);
+    const url =
+      `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?` +
+      new URLSearchParams({
+        alt: "media",
+        supportsAllDrives: "true",
+      }).toString();
+
+    // Important: retries très limités sur media (sinon 504 Netlify)
+    const res = await fetchWithRetry(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    }, {
+      attempts: 2,
+      timeoutMs: 10000,
+      retryStatuses: [429, 500, 502, 503], // PAS 504 ici
+    });
+
+    if (!res.ok) {
+      const errTxt = await res.text().catch(() => "");
+      console.error("Erreur Drive GET(media):", res.status, errTxt);
+      return withCors({ statusCode: res.status, body: "Erreur Google Drive (download)" }, allowOrigin);
+    }
+
+    const contentType = res.headers.get("content-type") || "application/octet-stream";
+
+    // Si c’est du CSV/texte -> on renvoie du texte (beaucoup + stable que base64)
+    if (isProbablyText(contentType) || name.toLowerCase().endsWith(".csv")) {
+      const text = await res.text();
+
+      // Force CSV si on sait que c’est un csv
+      const forcedType = name.toLowerCase().endsWith(".csv")
+        ? "text/csv; charset=utf-8"
+        : contentType;
+
+      return withCors(
+        {
+          statusCode: 200,
+          headers: {
+            "Content-Type": forcedType,
+            "Cache-Control": `public, max-age=${cacheSeconds}, must-revalidate`,
+            "Netlify-CDN-Cache-Control": `public, max-age=${cacheSeconds}, must-revalidate`,
+          },
+          body: text,
+        },
+        allowOrigin
+      );
+    }
+
+    // Sinon binaire -> base64 (Netlify format)
+    const arrayBuf = await res.arrayBuffer();
+    return {
+      statusCode: 200,
+      headers: {
+        ...corsHeaders(allowOrigin),
+        "Content-Type": contentType,
+        "Cache-Control": `public, max-age=${cacheSeconds}, must-revalidate`,
+        "Netlify-CDN-Cache-Control": `public, max-age=${cacheSeconds}, must-revalidate`,
+      },
+      body: Buffer.from(arrayBuf).toString("base64"),
+      isBase64Encoded: true,
+    };
+  } catch (e) {
+    console.error("Erreur proxy Drive (GET):", e);
+    return withCors({ statusCode: 500, body: "Erreur interne proxy Drive" }, allowOrigin);
+  }
 }
