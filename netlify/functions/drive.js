@@ -1,9 +1,9 @@
-// netlify/functions/drive.js  (Node 18+)
+// netlify/functions/drive.js (Node 18+)
 // Proxy Google Drive via Service Account (LIST / DOWNLOAD / UPLOAD)
-// Objectif: stable (anti-504), CORS nickel, token cache, timeouts adaptés, retries intelligents.
+// Fixe: timeouts Drive + CORS + token cache + CSV historiques (UTF-8 / Windows-1252) => accents/emoji conservés.
 // Vars Netlify:
-// - GOOGLE_SERVICE_ACCOUNT_JSON  (JSON complet du service account)
-// - (optionnel) DOMAINS_ALLOWED  (CSV d'origines supplémentaires)
+// - GOOGLE_SERVICE_ACCOUNT_JSON (JSON complet service account)
+// - (optionnel) DOMAINS_ALLOWED (CSV d'origines supplémentaires)
 
 import { google } from "googleapis";
 
@@ -33,7 +33,7 @@ function pickAllowOrigin(originHeader) {
   return list.includes(origin) ? origin : (list[0] || "*");
 }
 
-function baseCorsHeaders(allowOrigin) {
+function corsHeaders(allowOrigin) {
   return {
     "Access-Control-Allow-Origin": allowOrigin,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -46,7 +46,7 @@ function respond(allowOrigin, { statusCode = 200, headers = {}, body = "" }) {
   return {
     statusCode,
     headers: {
-      ...baseCorsHeaders(allowOrigin),
+      ...corsHeaders(allowOrigin),
       ...headers,
     },
     body,
@@ -74,8 +74,7 @@ async function fetchWithRetry(
     attempts = 3,
     timeoutMs = 8000,
     baseDelayMs = 200,
-    // Par défaut, on retry "safe": 429 + 5xx hors 504.
-    retryStatuses = [429, 500, 502, 503],
+    retryStatuses = [429, 500, 502, 503], // pas 504 (sinon ça empile et timeoute)
   } = {}
 ) {
   let lastErr;
@@ -129,7 +128,7 @@ async function getAccessToken() {
 }
 
 /* =========================
-   Helpers
+   Helpers: cache + encodage CSV
    ========================= */
 
 function computeCacheSeconds(fileName = "") {
@@ -137,22 +136,43 @@ function computeCacheSeconds(fileName = "") {
   return fileName.includes(today) ? 60 : 3600;
 }
 
-function isTextLike(contentType = "", name = "") {
-  const ct = (contentType || "").toLowerCase();
-  const lowerName = (name || "").toLowerCase();
-
-  if (lowerName.endsWith(".csv") || lowerName.endsWith(".txt") || lowerName.endsWith(".log")) return true;
-  if (ct.startsWith("text/")) return true;
-  if (ct.includes("json") || ct.includes("xml") || ct.includes("csv")) return true;
-
-  // Drive renvoie parfois octet-stream pour des CSV
-  if (ct.includes("application/octet-stream") && lowerName.endsWith(".csv")) return true;
-
-  return false;
-}
-
 function isAbortError(e) {
   return e?.name === "AbortError" || String(e).includes("AbortError");
+}
+
+function isCsvOrText(contentType = "", name = "") {
+  const ct = (contentType || "").toLowerCase();
+  const n = (name || "").toLowerCase();
+  return (
+    n.endsWith(".csv") ||
+    ct.startsWith("text/") ||
+    ct.includes("csv") ||
+    ct.includes("json") ||
+    ct.includes("xml")
+  );
+}
+
+// Décode un CSV "smart":
+// - BOM UTF-8 => UTF-8
+// - sinon UTF-8, et si beaucoup de � (U+FFFD) => fallback windows-1252 (souvent les historiques)
+function decodeCsvSmart(arrayBuf) {
+  const u8 = new Uint8Array(arrayBuf);
+
+  const hasUtf8Bom = u8.length >= 3 && u8[0] === 0xef && u8[1] === 0xbb && u8[2] === 0xbf;
+  if (hasUtf8Bom) {
+    return new TextDecoder("utf-8").decode(u8);
+  }
+
+  const utf8 = new TextDecoder("utf-8").decode(u8);
+  const replacementCount = (utf8.match(/\uFFFD/g) || []).length;
+
+  // Seuil simple: si ça remplace plusieurs caractères, c'est probablement pas de l'UTF-8
+  if (replacementCount >= 2) {
+    // Fallback: windows-1252 (encodage très courant de CSV historiques)
+    return new TextDecoder("windows-1252").decode(u8);
+  }
+
+  return utf8;
 }
 
 /* =========================
@@ -164,16 +184,15 @@ export async function handler(event) {
   const originHeader = event.headers?.origin || event.headers?.Origin || "";
   const allowOrigin = pickAllowOrigin(originHeader);
 
-  // Préflight CORS
+  // Préflight
   if (method === "OPTIONS") {
-    return respond(allowOrigin, {
+    return {
       statusCode: 204,
-      headers: { "Cache-Control": "no-store" },
+      headers: { ...corsHeaders(allowOrigin), "Cache-Control": "no-store" },
       body: "",
-    });
+    };
   }
 
-  // Méthodes supportées
   if (method !== "GET" && method !== "POST") {
     return respond(allowOrigin, {
       statusCode: 405,
@@ -192,7 +211,7 @@ export async function handler(event) {
   }
 
   /* =========================
-     POST: Upload multipart
+     POST upload
      Body JSON:
      { upload:true, parentId, name, content, mimeType? }
      ========================= */
@@ -236,11 +255,7 @@ export async function handler(event) {
           },
           body: multipartBody,
         },
-        {
-          attempts: 3,
-          timeoutMs: 15000,
-          retryStatuses: [429, 500, 502, 503],
-        }
+        { attempts: 3, timeoutMs: 15000 }
       );
 
       const txt = await res.text().catch(() => "");
@@ -268,9 +283,7 @@ export async function handler(event) {
   }
 
   /* =========================
-     GET:
-     - list=true&id=<folderId> : liste du dossier
-     - sinon: download fichier id=<fileId>&name=<filename>
+     GET list / download
      ========================= */
   try {
     const qp = event.queryStringParameters || {};
@@ -285,7 +298,6 @@ export async function handler(event) {
     // LIST dossier
     if (list) {
       const q = `'${id}' in parents and trashed=false`;
-
       const url =
         "https://www.googleapis.com/drive/v3/files?" +
         new URLSearchParams({
@@ -299,11 +311,7 @@ export async function handler(event) {
       const res = await fetchWithRetry(
         url,
         { headers: { Authorization: `Bearer ${token}` } },
-        {
-          attempts: 3,
-          timeoutMs: 8000,
-          retryStatuses: [429, 500, 502, 503],
-        }
+        { attempts: 3, timeoutMs: 8000 }
       );
 
       const txt = await res.text().catch(() => "{}");
@@ -325,22 +333,18 @@ export async function handler(event) {
 
     // DOWNLOAD fichier
     const cacheSeconds = computeCacheSeconds(name);
-
     const url =
       `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?` +
-      new URLSearchParams({
-        alt: "media",
-        supportsAllDrives: "true",
-      }).toString();
+      new URLSearchParams({ alt: "media", supportsAllDrives: "true" }).toString();
 
-    // IMPORTANT: sur alt=media, Drive peut être lent => timeout plus long, retries très limités.
+    // Drive peut être lent sur alt=media -> timeout long, retries limités
     const res = await fetchWithRetry(
       url,
       { headers: { Authorization: `Bearer ${token}` } },
       {
         attempts: 2,
-        timeoutMs: 30000, // <-- clé de stabilité vs tes AbortError ~20s
-        retryStatuses: [429, 500, 502, 503], // pas 504
+        timeoutMs: 30000, // clé pour éviter AbortError sur fichiers lents
+        retryStatuses: [429, 500, 502, 503],
       }
     );
 
@@ -352,12 +356,15 @@ export async function handler(event) {
 
     const contentType = res.headers.get("content-type") || "application/octet-stream";
 
-    // CSV/texte -> renvoi en texte (beaucoup plus stable que base64)
-    if (isTextLike(contentType, name)) {
-      const text = await res.text();
+    // CSV/texte -> décodage smart pour restaurer accents historiques puis renvoi en UTF-8
+    if (isCsvOrText(contentType, name)) {
+      const arrayBuf = await res.arrayBuffer();
+      const text = decodeCsvSmart(arrayBuf);
+
+      // On renvoie toujours en UTF-8 côté client (même si source windows-1252)
       const forcedType = name.toLowerCase().endsWith(".csv")
         ? "text/csv; charset=utf-8"
-        : contentType;
+        : (contentType.includes("charset") ? contentType : `${contentType}; charset=utf-8`);
 
       return respond(allowOrigin, {
         statusCode: 200,
@@ -370,12 +377,12 @@ export async function handler(event) {
       });
     }
 
-    // Binaire -> base64 (format Netlify)
+    // Binaire -> base64
     const arrayBuf = await res.arrayBuffer();
     return {
       statusCode: 200,
       headers: {
-        ...baseCorsHeaders(allowOrigin),
+        ...corsHeaders(allowOrigin),
         "Content-Type": contentType,
         "Cache-Control": `public, max-age=${cacheSeconds}, must-revalidate`,
         "Netlify-CDN-Cache-Control": `public, max-age=${cacheSeconds}, must-revalidate`,
@@ -384,7 +391,6 @@ export async function handler(event) {
       isBase64Encoded: true,
     };
   } catch (e) {
-    // Timeout/Abort => 504 (pas 500)
     if (isAbortError(e)) {
       console.error("Timeout Drive (AbortError):", e);
       return respond(allowOrigin, {
