@@ -1,6 +1,7 @@
 // netlify/functions/drive.js (Node 18+)
 // Proxy Google Drive via Service Account (LIST / DOWNLOAD / UPLOAD)
-// Fixe: timeouts Drive + CORS + token cache + CSV historiques (UTF-8 / Windows-1252) => accents/emoji conservés.
+// Objectif: CORS stable + timeouts/retry + token cache + CSV renvoyés en UTF-8 (avec correction mojibake si besoin).
+//
 // Vars Netlify:
 // - GOOGLE_SERVICE_ACCOUNT_JSON (JSON complet service account)
 // - (optionnel) DOMAINS_ALLOWED (CSV d'origines supplémentaires)
@@ -74,7 +75,7 @@ async function fetchWithRetry(
     attempts = 3,
     timeoutMs = 8000,
     baseDelayMs = 200,
-    retryStatuses = [429, 500, 502, 503], // pas 504 (sinon ça empile et timeoute)
+    retryStatuses = [429, 500, 502, 503], // pas 504 sinon ça empile
   } = {}
 ) {
   let lastErr;
@@ -128,7 +129,7 @@ async function getAccessToken() {
 }
 
 /* =========================
-   Helpers: cache + encodage CSV
+   Helpers
    ========================= */
 
 function computeCacheSeconds(fileName = "") {
@@ -152,37 +153,50 @@ function isCsvOrText(contentType = "", name = "") {
   );
 }
 
-// Décode un CSV "smart":
-// - BOM UTF-8 => UTF-8
-// - sinon UTF-8, et si beaucoup de � (U+FFFD) => fallback windows-1252 (souvent les historiques)
-function countMatches(str, re) {
-  const m = str.match(re);
-  return m ? m.length : 0;
+// Correction "marteau" des mojibake (UTF-8 lu comme Win-1252) + NBSP
+function fixMojibakeFr(text) {
+  return text
+    // unités / symboles (séquences longues d'abord)
+    .replace(/Â°C/g, "°C")
+    .replace(/Â°/g, "°")
+
+    // "à" mal encodé (souvent avec double espace)
+    .replace(/Ã\s\s+/g, "à ")
+
+    // ponctuation typographique
+    .replace(/â€™/g, "’")
+    .replace(/â€˜/g, "‘")
+    .replace(/â€œ/g, "“")
+    .replace(/â€/g, "”")
+    .replace(/â€ž/g, "„")
+    .replace(/â€“/g, "–")
+    .replace(/â€”/g, "—")
+    .replace(/â€¦/g, "…")
+    .replace(/â€¢/g, "•")
+
+    // accents FR (min)
+    .replace(/Ã©/g, "é")
+    .replace(/Ã¨/g, "è")
+    .replace(/Ãª/g, "ê")
+    .replace(/Ã«/g, "ë")
+    .replace(/Ã§/g, "ç")
+    .replace(/Ã®/g, "î")
+    .replace(/Ã¯/g, "ï")
+    .replace(/Ã´/g, "ô")
+    .replace(/Ã¹/g, "ù")
+    .replace(/Ã»/g, "û")
+    .replace(/Ã¼/g, "ü")
+
+    // majuscules utiles
+    .replace(/Ã€/g, "À")
+    .replace(/Ã‰/g, "É")
+    .replace(/Ãˆ/g, "È")
+    .replace(/ÃŠ/g, "Ê")
+    .replace(/Ã‡/g, "Ç")
+
+    // nettoyage final des Â restants (NBSP/parasites)
+    .replace(/Â/g, "");
 }
-
-function scoreDecodedText(s) {
-  // Plus le score est bas, mieux c’est.
-  const replacement = countMatches(s, /\uFFFD/g);
-  const mojibake = countMatches(s, /Ã.|Â.|â€™|â€œ|â€|â€“|â€”|â€¦/g);
-  const controls = countMatches(s, /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g);
-  return (replacement * 100) + (mojibake * 10) + (controls * 3);
-}
-
-function decodeCsvSmart(arrayBuf) {
-  const u8 = new Uint8Array(arrayBuf);
-
-  // BOM UTF-8 => UTF-8 direct
-  if (u8.length >= 3 && u8[0] === 0xef && u8[1] === 0xbb && u8[2] === 0xbf) {
-    return new TextDecoder("utf-8").decode(u8);
-  }
-
-  const utf8 = new TextDecoder("utf-8").decode(u8);
-  const win1252 = new TextDecoder("windows-1252").decode(u8);
-
-  return scoreDecodedText(utf8) <= scoreDecodedText(win1252) ? utf8 : win1252;
-}
-
-
 
 /* =========================
    Handler
@@ -346,15 +360,10 @@ export async function handler(event) {
       `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?` +
       new URLSearchParams({ alt: "media", supportsAllDrives: "true" }).toString();
 
-    // Drive peut être lent sur alt=media -> timeout long, retries limités
     const res = await fetchWithRetry(
       url,
       { headers: { Authorization: `Bearer ${token}` } },
-      {
-        attempts: 2,
-        timeoutMs: 30000, // clé pour éviter AbortError sur fichiers lents
-        retryStatuses: [429, 500, 502, 503],
-      }
+      { attempts: 2, timeoutMs: 30000, retryStatuses: [429, 500, 502, 503] }
     );
 
     if (!res.ok) {
@@ -365,12 +374,18 @@ export async function handler(event) {
 
     const contentType = res.headers.get("content-type") || "application/octet-stream";
 
-    // CSV/texte -> décodage smart pour restaurer accents historiques puis renvoi en UTF-8
+    // Texte/CSV => forcer décodage UTF-8 et corriger mojibake si présent
     if (isCsvOrText(contentType, name)) {
       const arrayBuf = await res.arrayBuffer();
-      const text = decodeCsvSmart(arrayBuf);
 
-      // On renvoie toujours en UTF-8 côté client (même si source windows-1252)
+      // Force UTF-8 (solution demandée)
+      let text = new TextDecoder("utf-8").decode(new Uint8Array(arrayBuf));
+
+      // Rustine: si mojibake présent, on corrige (ça ne change rien si déjà OK)
+      if (/[ÃÂ]|â€™|â€œ|â€|â€“|â€”|â€¦/.test(text)) {
+        text = fixMojibakeFr(text);
+      }
+
       const forcedType = name.toLowerCase().endsWith(".csv")
         ? "text/csv; charset=utf-8"
         : (contentType.includes("charset") ? contentType : `${contentType}; charset=utf-8`);
@@ -385,46 +400,6 @@ export async function handler(event) {
         body: text,
       });
     }
-
-     // CSV/texte -> décodage + correction mojibake (Ã© etc.) puis renvoi en UTF-8
-if (isCsvOrText(contentType, name)) {
-  const arrayBuf = await res.arrayBuffer();
-  const text = decodeCsvSmart(arrayBuf);
-
-  const fixed = text
-    .replace(/Ã©/g, "é")
-    .replace(/Ã¨/g, "è")
-    .replace(/Ãª/g, "ê")
-    .replace(/Ã /g, "à")
-    .replace(/Ã¹/g, "ù")
-    .replace(/Ã´/g, "ô")
-    .replace(/Ã®/g, "î")
-    .replace(/Ã¯/g, "ï")
-    .replace(/Ã§/g, "ç")
-    .replace(/Â°/g, "°")
-    .replace(/â€™/g, "’")
-    .replace(/â€œ/g, "“")
-    .replace(/â€/g, "”")
-    .replace(/â€“/g, "–")
-    .replace(/â€”/g, "—")
-    .replace(/â€¦/g, "…");
-
-  // On renvoie toujours en UTF-8 côté client
-  const forcedType = name.toLowerCase().endsWith(".csv")
-    ? "text/csv; charset=utf-8"
-    : (contentType.includes("charset") ? contentType : `${contentType}; charset=utf-8`);
-
-  return respond(allowOrigin, {
-    statusCode: 200,
-    headers: {
-      "Content-Type": forcedType,
-      "Cache-Control": `public, max-age=${cacheSeconds}, must-revalidate`,
-      "Netlify-CDN-Cache-Control": `public, max-age=${cacheSeconds}, must-revalidate`,
-    },
-    body: fixed,
-  });
-}
-
 
     // Binaire -> base64
     const arrayBuf = await res.arrayBuffer();
