@@ -1,13 +1,14 @@
 // netlify/functions/drive.js (Node 18+)
 // Proxy Google Drive via Service Account (LIST / DOWNLOAD / UPLOAD)
 // Objectif: stabilité (timeouts/retry) + CORS stable + token cache
-// CSV/text: décodage SMART (UTF-8 si OK sinon fallback windows-1252) + renvoi UTF-8
+// Texte/CSV: détection encodage (BOM + test UTF-8) puis conversion => UTF-8 (sans "marteau" mojibake)
 //
 // Vars Netlify:
 // - GOOGLE_SERVICE_ACCOUNT_JSON (JSON complet service account)
 // - (optionnel) DOMAINS_ALLOWED (CSV d'origines supplémentaires)
 
 import { google } from "googleapis";
+import iconv from "iconv-lite";
 
 /* =========================
    CORS
@@ -47,10 +48,7 @@ function corsHeaders(allowOrigin) {
 function respond(allowOrigin, { statusCode = 200, headers = {}, body = "" }) {
   return {
     statusCode,
-    headers: {
-      ...corsHeaders(allowOrigin),
-      ...headers,
-    },
+    headers: { ...corsHeaders(allowOrigin), ...headers },
     body,
   };
 }
@@ -59,7 +57,11 @@ function respond(allowOrigin, { statusCode = 200, headers = {}, body = "" }) {
    Fetch: timeout + retry
    ========================= */
 
-async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
+function isAbortError(e) {
+  return e?.name === "AbortError" || String(e).includes("AbortError");
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 12000) {
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -74,9 +76,9 @@ async function fetchWithRetry(
   options,
   {
     attempts = 3,
-    timeoutMs = 8000,
-    baseDelayMs = 200,
-    retryStatuses = [429, 500, 502, 503], // pas 504 sinon ça empile
+    timeoutMs = 12000,
+    baseDelayMs = 250,
+    retryStatuses = [429, 500, 502, 503, 504],
   } = {}
 ) {
   let lastErr;
@@ -90,8 +92,7 @@ async function fetchWithRetry(
     } catch (e) {
       lastErr = e;
     }
-
-    const jitter = Math.random() * 100;
+    const jitter = Math.random() * 120;
     await new Promise((r) => setTimeout(r, baseDelayMs * 2 ** i + jitter));
   }
 
@@ -130,16 +131,12 @@ async function getAccessToken() {
 }
 
 /* =========================
-   Helpers: cache + text/csv decode
+   Helpers: cache + text/csv
    ========================= */
 
 function computeCacheSeconds(fileName = "") {
   const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
   return fileName.includes(today) ? 60 : 3600;
-}
-
-function isAbortError(e) {
-  return e?.name === "AbortError" || String(e).includes("AbortError");
 }
 
 function isCsvOrText(contentType = "", name = "") {
@@ -154,71 +151,47 @@ function isCsvOrText(contentType = "", name = "") {
   );
 }
 
-// Décodage SMART:
-// - BOM UTF-8 -> UTF-8
-// - sinon: tente UTF-8, si présence de caractère de remplacement (�) -> fallback windows-1252
-function decodeTextSmart(arrayBuf) {
-  const u8 = new Uint8Array(arrayBuf);
+// Détection simple & fiable :
+// - UTF-8 BOM => utf8
+// - UTF-16 BOM => utf16le/utf16be
+// - sinon: tenter UTF-8 strict-ish (surrogates/�) puis fallback win1252
+function decodeToUtf8String(arrayBuf) {
+  const buf = Buffer.from(arrayBuf);
 
-  // BOM UTF-8
-  if (u8.length >= 3 && u8[0] === 0xef && u8[1] === 0xbb && u8[2] === 0xbf) {
-    return new TextDecoder("utf-8").decode(u8);
+  // UTF-8 BOM
+  if (buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) {
+    return buf.slice(3).toString("utf8");
   }
 
-  const utf8 = new TextDecoder("utf-8").decode(u8);
-  const bad = (utf8.match(/\uFFFD/g) || []).length;
+  // UTF-16 LE BOM
+  if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) {
+    return iconv.decode(buf.slice(2), "utf16-le");
+  }
 
-  // Sur tes historiques, si ça apparaît, c'est quasi toujours du win-1252
-  if (bad >= 1) {
-    return new TextDecoder("windows-1252").decode(u8);
+  // UTF-16 BE BOM
+  if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) {
+    // iconv-lite gère utf16-be via "utf16-be"
+    return iconv.decode(buf.slice(2), "utf16-be");
+  }
+
+  // Tentative UTF-8
+  const utf8 = buf.toString("utf8");
+
+  // Heuristique: si on a des � (U+FFFD) c’est souvent du CP1252/Latin1 lu en UTF-8
+  // (ou du vrai binaire, mais ici on n'appelle ça que pour texte/CSV)
+  const replacementCount = (utf8.match(/\uFFFD/g) || []).length;
+  if (replacementCount > 0) {
+    return iconv.decode(buf, "win1252"); // windows-1252
   }
 
   return utf8;
 }
 
-// Correction optionnelle "marteau" si un mojibake traîne encore
-function fixMojibakeFr(text) {
-  return text
-    // unités / symboles
-    .replace(/Â°C/g, "°C")
-    .replace(/Â°/g, "°")
-
-    // "à" mal encodé (souvent avec double espace)
-    .replace(/Ã\s\s+/g, "à ")
-
-    // ponctuation typographique
-    .replace(/â€™/g, "’")
-    .replace(/â€˜/g, "‘")
-    .replace(/â€œ/g, "“")
-    .replace(/â€/g, "”")
-    .replace(/â€ž/g, "„")
-    .replace(/â€“/g, "–")
-    .replace(/â€”/g, "—")
-    .replace(/â€¦/g, "…")
-    .replace(/â€¢/g, "•")
-
-    // accents FR (min)
-    .replace(/Ã©/g, "é")
-    .replace(/Ã¨/g, "è")
-    .replace(/Ãª/g, "ê")
-    .replace(/Ã«/g, "ë")
-    .replace(/Ã§/g, "ç")
-    .replace(/Ã®/g, "î")
-    .replace(/Ã¯/g, "ï")
-    .replace(/Ã´/g, "ô")
-    .replace(/Ã¹/g, "ù")
-    .replace(/Ã»/g, "û")
-    .replace(/Ã¼/g, "ü")
-
-    // majuscules utiles
-    .replace(/Ã€/g, "À")
-    .replace(/Ã‰/g, "É")
-    .replace(/Ãˆ/g, "È")
-    .replace(/ÃŠ/g, "Ê")
-    .replace(/Ã‡/g, "Ç")
-
-    // nettoyage final des Â restants
-    .replace(/Â/g, "");
+function ensureCharsetUtf8(contentType, name) {
+  const n = (name || "").toLowerCase();
+  if (n.endsWith(".csv")) return "text/csv; charset=utf-8";
+  const ct = contentType || "text/plain";
+  return ct.toLowerCase().includes("charset=") ? ct : `${ct}; charset=utf-8`;
 }
 
 /* =========================
@@ -268,10 +241,16 @@ export async function handler(event) {
         return respond(allowOrigin, { statusCode: 400, body: "Paramètres manquants pour upload" });
       }
 
+      // Pour éviter les surprises: si c'est CSV/texte, impose UTF-8 dans le Content-Type de la partie "fichier"
+      const rawMime = body.mimeType || (String(body.name).toLowerCase().endsWith(".csv") ? "text/csv" : "text/plain");
+      const filePartMime = rawMime.toLowerCase().startsWith("text/") && !rawMime.toLowerCase().includes("charset=")
+        ? `${rawMime}; charset=utf-8`
+        : rawMime;
+
       const metadata = {
         name: body.name,
         parents: [body.parentId],
-        mimeType: body.mimeType || "text/plain",
+        mimeType: rawMime, // Drive mimeType (sans charset), c'est OK
       };
 
       const boundary = "-------smesuploadboundary" + Date.now();
@@ -280,16 +259,13 @@ export async function handler(event) {
         `Content-Type: application/json; charset=UTF-8\r\n\r\n` +
         JSON.stringify(metadata) +
         `\r\n--${boundary}\r\n` +
-        `Content-Type: ${metadata.mimeType}\r\n\r\n` +
+        `Content-Type: ${filePartMime}\r\n\r\n` +
         body.content +
         `\r\n--${boundary}--`;
 
       const uploadUrl =
         "https://www.googleapis.com/upload/drive/v3/files?" +
-        new URLSearchParams({
-          uploadType: "multipart",
-          supportsAllDrives: "true",
-        }).toString();
+        new URLSearchParams({ uploadType: "multipart", supportsAllDrives: "true" }).toString();
 
       const res = await fetchWithRetry(
         uploadUrl,
@@ -301,7 +277,7 @@ export async function handler(event) {
           },
           body: multipartBody,
         },
-        { attempts: 3, timeoutMs: 15000 }
+        { attempts: 3, timeoutMs: 20000 }
       );
 
       const txt = await res.text().catch(() => "");
@@ -311,12 +287,7 @@ export async function handler(event) {
       }
 
       let out = {};
-      try {
-        out = JSON.parse(txt);
-      } catch {
-        /* ignore */
-      }
-
+      try { out = JSON.parse(txt); } catch {}
       return respond(allowOrigin, {
         statusCode: 200,
         headers: { "Content-Type": "application/json" },
@@ -337,33 +308,45 @@ export async function handler(event) {
     const name = qp.name || "";
     const list = String(qp.list || "").toLowerCase() === "true";
 
-    if (!id) {
-      return respond(allowOrigin, { statusCode: 400, body: "Missing id parameter" });
-    }
+    if (!id) return respond(allowOrigin, { statusCode: 400, body: "Missing id parameter" });
 
-    // LIST dossier
+    // LIST dossier (pagination) — évite 500/timeouts quand il y a beaucoup de fichiers
     if (list) {
+      const pageSize = 1000;
+      const maxPages = 20; // sécurité anti-boucle infinie
       const q = `'${id}' in parents and trashed=false`;
-      const url =
-        "https://www.googleapis.com/drive/v3/files?" +
-        new URLSearchParams({
-          q,
-          fields: "files(id,name,mimeType,size,createdTime,modifiedTime)",
-          supportsAllDrives: "true",
-          includeItemsFromAllDrives: "true",
-          pageSize: "1000",
-        }).toString();
 
-      const res = await fetchWithRetry(
-        url,
-        { headers: { Authorization: `Bearer ${token}` } },
-        { attempts: 3, timeoutMs: 8000 }
-      );
+      let files = [];
+      let pageToken = undefined;
 
-      const txt = await res.text().catch(() => "{}");
-      if (!res.ok) {
-        console.error("Erreur list Drive:", res.status, txt);
-        return respond(allowOrigin, { statusCode: res.status, body: "Erreur Google Drive (list)" });
+      for (let i = 0; i < maxPages; i++) {
+        const url =
+          "https://www.googleapis.com/drive/v3/files?" +
+          new URLSearchParams({
+            q,
+            fields: "nextPageToken,files(id,name,mimeType,size,createdTime,modifiedTime)",
+            supportsAllDrives: "true",
+            includeItemsFromAllDrives: "true",
+            pageSize: String(pageSize),
+            ...(pageToken ? { pageToken } : {}),
+          }).toString();
+
+        const res = await fetchWithRetry(
+          url,
+          { headers: { Authorization: `Bearer ${token}` } },
+          { attempts: 3, timeoutMs: 12000 }
+        );
+
+        const txt = await res.text().catch(() => "{}");
+        if (!res.ok) {
+          console.error("Erreur list Drive:", res.status, txt);
+          return respond(allowOrigin, { statusCode: res.status, body: "Erreur Google Drive (list)" });
+        }
+
+        const data = JSON.parse(txt);
+        files.push(...(data.files || []));
+        pageToken = data.nextPageToken;
+        if (!pageToken) break;
       }
 
       return respond(allowOrigin, {
@@ -373,7 +356,7 @@ export async function handler(event) {
           "Cache-Control": "public, max-age=30, must-revalidate",
           "Netlify-CDN-Cache-Control": "public, max-age=30, must-revalidate",
         },
-        body: txt,
+        body: JSON.stringify({ files }),
       });
     }
 
@@ -386,11 +369,7 @@ export async function handler(event) {
     const res = await fetchWithRetry(
       url,
       { headers: { Authorization: `Bearer ${token}` } },
-      {
-        attempts: 2,
-        timeoutMs: 30000,
-        retryStatuses: [429, 500, 502, 503],
-      }
+      { attempts: 3, timeoutMs: 30000, retryStatuses: [429, 500, 502, 503, 504] }
     );
 
     if (!res.ok) {
@@ -401,25 +380,15 @@ export async function handler(event) {
 
     const contentType = res.headers.get("content-type") || "application/octet-stream";
 
-    // CSV/texte => decode smart + (option) fix mojibake, renvoi UTF-8
+    // CSV/texte => conversion sûre vers UTF-8, pas de "mojibake fix" destructif
     if (isCsvOrText(contentType, name)) {
       const arrayBuf = await res.arrayBuffer();
-
-      let text = decodeTextSmart(arrayBuf);
-
-      // Si malgré tout un mojibake traîne, on corrige (ne change rien si déjà OK)
-      if (/[ÃÂ]|â€™|â€œ|â€|â€“|â€”|â€¦/.test(text)) {
-        text = fixMojibakeFr(text);
-      }
-
-      const forcedType = name.toLowerCase().endsWith(".csv")
-        ? "text/csv; charset=utf-8"
-        : (contentType.includes("charset") ? contentType : `${contentType}; charset=utf-8`);
+      const text = decodeToUtf8String(arrayBuf);
 
       return respond(allowOrigin, {
         statusCode: 200,
         headers: {
-          "Content-Type": forcedType,
+          "Content-Type": ensureCharsetUtf8(contentType, name),
           "Cache-Control": `public, max-age=${cacheSeconds}, must-revalidate`,
           "Netlify-CDN-Cache-Control": `public, max-age=${cacheSeconds}, must-revalidate`,
         },
@@ -446,10 +415,9 @@ export async function handler(event) {
       return respond(allowOrigin, {
         statusCode: 504,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ error: "Timeout Google Drive (download trop lent)" }),
+        body: JSON.stringify({ error: "Timeout Google Drive" }),
       });
     }
-
     console.error("Erreur proxy Drive (GET):", e);
     return respond(allowOrigin, { statusCode: 500, body: "Erreur interne proxy Drive" });
   }
