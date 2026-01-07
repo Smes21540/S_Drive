@@ -1,6 +1,7 @@
 // netlify/functions/drive.js (Node 18+)
 // Proxy Google Drive via Service Account (LIST / DOWNLOAD / UPLOAD)
-// Objectif: CORS stable + timeouts/retry + token cache + CSV renvoyés en UTF-8 (avec correction mojibake si besoin).
+// Objectif: stabilité (timeouts/retry) + CORS stable + token cache
+// CSV/text: décodage SMART (UTF-8 si OK sinon fallback windows-1252) + renvoi UTF-8
 //
 // Vars Netlify:
 // - GOOGLE_SERVICE_ACCOUNT_JSON (JSON complet service account)
@@ -129,7 +130,7 @@ async function getAccessToken() {
 }
 
 /* =========================
-   Helpers
+   Helpers: cache + text/csv decode
    ========================= */
 
 function computeCacheSeconds(fileName = "") {
@@ -153,10 +154,32 @@ function isCsvOrText(contentType = "", name = "") {
   );
 }
 
-// Correction "marteau" des mojibake (UTF-8 lu comme Win-1252) + NBSP
+// Décodage SMART:
+// - BOM UTF-8 -> UTF-8
+// - sinon: tente UTF-8, si présence de caractère de remplacement (�) -> fallback windows-1252
+function decodeTextSmart(arrayBuf) {
+  const u8 = new Uint8Array(arrayBuf);
+
+  // BOM UTF-8
+  if (u8.length >= 3 && u8[0] === 0xef && u8[1] === 0xbb && u8[2] === 0xbf) {
+    return new TextDecoder("utf-8").decode(u8);
+  }
+
+  const utf8 = new TextDecoder("utf-8").decode(u8);
+  const bad = (utf8.match(/\uFFFD/g) || []).length;
+
+  // Sur tes historiques, si ça apparaît, c'est quasi toujours du win-1252
+  if (bad >= 1) {
+    return new TextDecoder("windows-1252").decode(u8);
+  }
+
+  return utf8;
+}
+
+// Correction optionnelle "marteau" si un mojibake traîne encore
 function fixMojibakeFr(text) {
   return text
-    // unités / symboles (séquences longues d'abord)
+    // unités / symboles
     .replace(/Â°C/g, "°C")
     .replace(/Â°/g, "°")
 
@@ -194,7 +217,7 @@ function fixMojibakeFr(text) {
     .replace(/ÃŠ/g, "Ê")
     .replace(/Ã‡/g, "Ç")
 
-    // nettoyage final des Â restants (NBSP/parasites)
+    // nettoyage final des Â restants
     .replace(/Â/g, "");
 }
 
@@ -363,7 +386,11 @@ export async function handler(event) {
     const res = await fetchWithRetry(
       url,
       { headers: { Authorization: `Bearer ${token}` } },
-      { attempts: 2, timeoutMs: 30000, retryStatuses: [429, 500, 502, 503] }
+      {
+        attempts: 2,
+        timeoutMs: 30000,
+        retryStatuses: [429, 500, 502, 503],
+      }
     );
 
     if (!res.ok) {
@@ -374,14 +401,13 @@ export async function handler(event) {
 
     const contentType = res.headers.get("content-type") || "application/octet-stream";
 
-    // Texte/CSV => forcer décodage UTF-8 et corriger mojibake si présent
+    // CSV/texte => decode smart + (option) fix mojibake, renvoi UTF-8
     if (isCsvOrText(contentType, name)) {
       const arrayBuf = await res.arrayBuffer();
 
-      // Force UTF-8 (solution demandée)
-      let text = new TextDecoder("utf-8").decode(new Uint8Array(arrayBuf));
+      let text = decodeTextSmart(arrayBuf);
 
-      // Rustine: si mojibake présent, on corrige (ça ne change rien si déjà OK)
+      // Si malgré tout un mojibake traîne, on corrige (ne change rien si déjà OK)
       if (/[ÃÂ]|â€™|â€œ|â€|â€“|â€”|â€¦/.test(text)) {
         text = fixMojibakeFr(text);
       }
