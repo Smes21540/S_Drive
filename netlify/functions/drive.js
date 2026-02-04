@@ -189,31 +189,50 @@ export async function handler(event, context) {
         return corsResponse({ statusCode: 500, body: "Auth Service Account échouée" }, allowOrigin);
       }
 
-      if (list) {
-        // Liste des fichiers d'un dossier
-        const url =
-          `https://www.googleapis.com/drive/v3/files` +
-          `?q='${encodeURIComponent(id)}'+in+parents+and+trashed=false` +
-          `&fields=files(id,name,mimeType,size,createdTime,modifiedTime)` +
-          `&supportsAllDrives=true`;
+if (list) {
+  // Liste paginée des fichiers d'un dossier (évite la "limite" 100/1000)
+  let allFiles = [];
+  let pageToken = undefined;
 
-        const response = await fetchWithRetry(url, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+  do {
+    const params = new URLSearchParams();
+    // ⚠️ ne pas encodeURIComponent(id) à l'intérieur de q
+    params.set("q", `'${id}' in parents and trashed=false`);
+    params.set("fields", "nextPageToken, files(id,name,mimeType,size,createdTime,modifiedTime)");
+    params.set("pageSize", "1000");
+    params.set("supportsAllDrives", "true");
+    params.set("includeItemsFromAllDrives", "true");
+    if (pageToken) params.set("pageToken", pageToken);
 
-        const data = await response.json().catch(() => ({}));
+    const url = `https://www.googleapis.com/drive/v3/files?${params.toString()}`;
 
-        return corsResponse({
-          statusCode: response.ok ? 200 : response.status,
-          headers: {
-            "Content-Type": "application/json",
-            // Cache light côté CDN & navigateur
-            "Cache-Control": "public, max-age=30, must-revalidate",
-            "Netlify-CDN-Cache-Control": "public, max-age=30, must-revalidate",
-          },
-          body: JSON.stringify(data)
-        }, allowOrigin);
-      }
+    const response = await fetchWithRetry(url, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    if (!response.ok) {
+      const errTxt = await response.text().catch(() => "");
+      console.error("Erreur list Drive:", response.status, errTxt);
+      return corsResponse({ statusCode: response.status, body: "Erreur list Drive" }, allowOrigin);
+    }
+
+    const data = await response.json().catch(() => ({}));
+    allFiles.push(...(data.files || []));
+    pageToken = data.nextPageToken;
+
+  } while (pageToken);
+
+  return corsResponse({
+    statusCode: 200,
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "public, max-age=30, must-revalidate",
+      "Netlify-CDN-Cache-Control": "public, max-age=30, must-revalidate",
+    },
+    body: JSON.stringify({ files: allFiles })
+  }, allowOrigin);
+}
+
 
       // Téléchargement d'un fichier
       const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?alt=media&supportsAllDrives=true`;
