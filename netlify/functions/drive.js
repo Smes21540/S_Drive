@@ -184,6 +184,7 @@ const list = String(qp.list || "").toLowerCase() === "true";
 const download = ["1", "true", "yes"].includes(String(qp.download || "").toLowerCase());
 
 
+
       if (!id) {
         return corsResponse({ statusCode: 400, body: "Missing id parameter" }, allowOrigin);
       }
@@ -261,7 +262,9 @@ if (list) {
 // ✅ helpers filename safe + RFC5987
 const safeName = (name || "fichier")
   .replace(/[\/\\:*?"<>|]/g, "_")
+  .replace(/"/g, "'")
   .trim() || "fichier";
+
 const encodedName = encodeURIComponent(safeName);
 
 // ✅ Content-Disposition si on veut forcer le download
