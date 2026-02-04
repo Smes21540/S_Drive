@@ -1545,7 +1545,9 @@ const tdFolder=document.createElement('td'); tdFolder.textContent=folderName;
     const tdAction=document.createElement('td'); tdAction.className='action-cell';
     let html='';
 if(f.name.toLowerCase().endsWith('.csv')){
-  html+=`<a href="https://drive.google.com/uc?export=download&id=${f.id}" target="_blank"><button class="action-btn">Télécharger</button></a>`;
+  html+=`<a href="https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&download=1&site=Smes_Acces" target="_blank">
+          <button class="action-btn">Télécharger</button>
+        </a>`;
   html+=`<button class="action-btn" onclick="openViewer('viewer.html','${f.id}','${f.name}')">Tableau</button>`;
 
   // 👇 bouton Courbes seulement si on n'est PAS dans Historique
@@ -1558,6 +1560,7 @@ if(f.name.toLowerCase().endsWith('.csv')){
     html+=`<button class="action-btn" onclick="openViewer('index03.html','${f.id}','${f.name}')">Sondes</button>`;
   }
 }
+
 
 
 
@@ -1596,21 +1599,29 @@ if (
 
 
 
-    if(/\.(jpg|jpeg)$/i.test(f.name)){
-      html+=`<img src="https://drive.google.com/thumbnail?id=${f.id}" onclick="openModal('${f.id}')" alt="aperçu">`;
-      html+=`<a href="https://drive.google.com/uc?export=download&id=${f.id}" target="_blank"><button class="action-btn">Télécharger</button></a>`;
-    }
+if(/\.(jpg|jpeg)$/i.test(f.name)){
+  html+=`<img src="https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&site=Smes_Acces"
+    onclick="openModal('${f.id}')"
+    alt="aperçu">`;
+
+  html+=`<a href="https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&download=1&site=Smes_Acces" target="_blank">
+          <button class="action-btn">Télécharger</button>
+        </a>`;
+
+}
+
 
 // === PDF ===
 if (f.name.toLowerCase().endsWith(".pdf")) {
   html += `
-    <a href="https://drive.google.com/uc?export=download&id=${f.id}" target="_blank">
+    <a href="https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&download=1&site=Smes_Acces" target="_blank">
       <button class="action-btn">Télécharger</button>
     </a>
     <button class="action-btn" onclick="openModal('${f.id}')">Ouvrir</button>
 
   `;
 }
+
 
 
     tdAction.innerHTML=html;
@@ -1768,15 +1779,17 @@ function openModal(id) {
   const file = previewFiles[currentPreviewIndex];
   if (!file) return;
 
-  const type = getPreviewType(file.name);
+  // ✅ Aperçu via ton proxy Netlify (marche aussi en accès limité)
+  frame.src = `https://smes21540.netlify.app/.netlify/functions/drive?id=${id}&name=${encodeURIComponent(file.name)}&site=Smes_Acces`;
 
-  frame.src = (type === "pdf")
-    ? `https://drive.google.com/file/d/${id}/preview#toolbar=0`
-    : `https://drive.google.com/file/d/${id}/preview`;
-
+  // ✅ Download via ton proxy Netlify
   document.getElementById('downloadBtn').onclick = () =>
-    window.open(`https://drive.google.com/uc?export=download&id=${id}`, '_blank');
+    window.open(
+      `https://smes21540.netlify.app/.netlify/functions/drive?id=${id}&name=${encodeURIComponent(file.name)}&download=1&site=Smes_Acces`,
+      '_blank'
+    );
 }
+
 
 
 function closeModal(){document.getElementById('imageModal').style.display='none';}
@@ -2652,6 +2665,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
