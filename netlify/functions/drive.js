@@ -175,10 +175,14 @@ export async function handler(event, context) {
   // Lecture (GET): list=bool pour lister un dossier ; sinon téléchargement d'un fichier
   if (method === "GET") {
     try {
-      const qp = event.queryStringParameters || {};
-      const id = qp.id;
-      const name = qp.name || "";
-      const list = String(qp.list || "").toLowerCase() === "true";
+const qp = event.queryStringParameters || {};
+const id = qp.id;
+const name = qp.name || "";
+const list = String(qp.list || "").toLowerCase() === "true";
+
+// ✅ force download si &download=1 (ou true/yes)
+const download = ["1", "true", "yes"].includes(String(qp.download || "").toLowerCase());
+
 
       if (!id) {
         return corsResponse({ statusCode: 400, body: "Missing id parameter" }, allowOrigin);
@@ -254,21 +258,40 @@ if (list) {
       const isTodayFile = name.includes(today);
       const cacheSeconds = isTodayFile ? 60 : 3600;
 
-      // Binaire encodé en Base64 (format Netlify)
-      return {
-        statusCode: 200,
-        headers: {
-          "Access-Control-Allow-Origin": allowOrigin,
-          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
-          "Access-Control-Max-Age": "600",
-          "Content-Type": contentType,
-          "Cache-Control": `public, max-age=${cacheSeconds}, must-revalidate`,
-          "Netlify-CDN-Cache-Control": `public, max-age=${cacheSeconds}, must-revalidate`,
-        },
-        body: Buffer.from(arrayBuf).toString("base64"),
-        isBase64Encoded: true
-      };
+// ✅ helpers filename safe + RFC5987
+const safeName = (name || "fichier")
+  .replace(/[\/\\:*?"<>|]/g, "_")
+  .trim() || "fichier";
+const encodedName = encodeURIComponent(safeName);
+
+// ✅ Content-Disposition si on veut forcer le download
+const contentDisposition = download
+  ? `attachment; filename="${safeName}"; filename*=UTF-8''${encodedName}`
+  : `inline; filename="${safeName}"; filename*=UTF-8''${encodedName}`;
+
+// Binaire encodé en Base64 (format Netlify)
+return {
+  statusCode: 200,
+  headers: {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
+    "Access-Control-Max-Age": "600",
+    "Content-Type": contentType,
+
+    // ✅ le truc qui change tout
+    "Content-Disposition": contentDisposition,
+
+    // optionnel mais pratique
+    "Content-Length": String(arrayBuf.byteLength),
+
+    "Cache-Control": `public, max-age=${cacheSeconds}, must-revalidate`,
+    "Netlify-CDN-Cache-Control": `public, max-age=${cacheSeconds}, must-revalidate`,
+  },
+  body: Buffer.from(arrayBuf).toString("base64"),
+  isBase64Encoded: true
+};
+
     } catch (err) {
       console.error("Erreur proxy Drive (GET):", err);
       return corsResponse({ statusCode: 500, body: "Erreur interne proxy Drive" }, allowOrigin);
