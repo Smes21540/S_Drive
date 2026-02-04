@@ -682,7 +682,7 @@ let storedNotes = {};
 const FLAME_THRESHOLD = 40.0;   // seuil déclencheur de la flamme 🔥
 
 /* ----------- État ----------- */
-let imageFiles=[], currentImageIndex=0;
+let previewFiles = [], currentPreviewIndex = 0;
 let filterStartDate="", filterEndDate="";
 let themeMenuTimer;
 let cancelScan = false; // 🛑 permet d’arrêter le scan si on clique ailleurs
@@ -1222,8 +1222,9 @@ document.querySelectorAll('#csvTable tbody tr').forEach(tr => {
   }
 }
 
-imageFiles = filtered.filter(f => /\.(jpg|jpeg)$/i.test(f.name)); 
+previewFiles = filtered.filter(f => /\.(jpg|jpeg|pdf)$/i.test(f.name));
 displayFiles(filtered, nameSpan ? nameSpan.textContent : '');
+
 
 
 // 🪄 Applique immédiatement les flammes du cache si déjà chargé pour ce site
@@ -1606,7 +1607,8 @@ if (f.name.toLowerCase().endsWith(".pdf")) {
     <a href="https://drive.google.com/uc?export=download&id=${f.id}" target="_blank">
       <button class="action-btn">Télécharger</button>
     </a>
-    <button class="action-btn" onclick="openModal('${f.id}', 'pdf')">Ouvrir</button>
+    <button class="action-btn" onclick="openModal('${f.id}')">Ouvrir</button>
+
   `;
 }
 
@@ -1750,41 +1752,58 @@ function clearFilter(){
   if(active) active.click();
 }
 
+function getPreviewType(fileName){
+  return /\.pdf$/i.test(fileName) ? "pdf" : "image";
+}
+
+
+  
 /* ----------- Modale images + navigation clavier ----------- */
-function openModal(id, type = "image") {
+function openModal(id) {
   const modal = document.getElementById('imageModal');
   modal.style.display = 'block';
   const frame = document.getElementById('modalFrame');
 
-  // 🔍 Détermine le mode d'affichage selon le type
-  if (type === "pdf") {
-    frame.src = `https://drive.google.com/file/d/${id}/preview#toolbar=0`; // ouvre le PDF dans l'iframe
-  } else {
-    frame.src = `https://drive.google.com/file/d/${id}/preview`;
-  }
+  currentPreviewIndex = previewFiles.findIndex(f => f.id === id);
+  const file = previewFiles[currentPreviewIndex];
+  if (!file) return;
 
-  currentImageIndex = imageFiles.findIndex(f => f.id === id);
+  const type = getPreviewType(file.name);
 
-  // 🔽 Bouton de téléchargement
+  frame.src = (type === "pdf")
+    ? `https://drive.google.com/file/d/${id}/preview#toolbar=0`
+    : `https://drive.google.com/file/d/${id}/preview`;
+
   document.getElementById('downloadBtn').onclick = () =>
     window.open(`https://drive.google.com/uc?export=download&id=${id}`, '_blank');
 }
 
+
 function closeModal(){document.getElementById('imageModal').style.display='none';}
 
-document.getElementById('prevBtn').onclick=()=>{if(currentImageIndex>0) openModal(imageFiles[--currentImageIndex].id);};
-document.getElementById('nextBtn').onclick=()=>{if(currentImageIndex<imageFiles.length-1) openModal(imageFiles[++currentImageIndex].id);};
+document.getElementById('prevBtn').onclick = () => {
+  if (currentPreviewIndex > 0) openModal(previewFiles[--currentPreviewIndex].id);
+};
+document.getElementById('nextBtn').onclick = () => {
+  if (currentPreviewIndex < previewFiles.length - 1) openModal(previewFiles[++currentPreviewIndex].id);
+};
+
 window.addEventListener('click',e=>{if(e.target===document.getElementById('imageModal')) closeModal();});
 
 // Navigation clavier quand la modale est ouverte
 window.addEventListener('keydown', e=>{
   const modal=document.getElementById('imageModal');
   if(modal.style.display==='block'){
-    if(e.key==='ArrowLeft' && currentImageIndex>0){ openModal(imageFiles[--currentImageIndex].id); }
-    if(e.key==='ArrowRight' && currentImageIndex<imageFiles.length-1){ openModal(imageFiles[++currentImageIndex].id); }
+    if(e.key==='ArrowLeft' && currentPreviewIndex>0){
+      openModal(previewFiles[--currentPreviewIndex].id);
+    }
+    if(e.key==='ArrowRight' && currentPreviewIndex<previewFiles.length-1){
+      openModal(previewFiles[++currentPreviewIndex].id);
+    }
     if(e.key==='Escape'){ closeModal(); }
   }
 });
+
 
 /* ----------- ZIP overlay + progression + annulation ----------- */
 const zipOverlay=document.getElementById('zipOverlay');
@@ -2633,6 +2652,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
