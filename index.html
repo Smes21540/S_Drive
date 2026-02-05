@@ -226,7 +226,27 @@ tbody tr:hover .action-btn{opacity:1;visibility:visible;}
 }
 
 /* Modale images */
-.modal{display:none;position:fixed;z-index:1300;padding-top:50px;left:0;top:0;width:100%;height:100%;background-color:var(--overlay);text-align:center;}
+.modal{
+  display:none;
+  position:fixed;
+  z-index:1300;
+  left:0;
+  top:0;
+  width:100%;
+  height:100%;
+
+  background-color:var(--overlay);
+
+  /* ✅ centrage réel */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+
+  padding: 20px;
+  box-sizing: border-box;
+}
+
 .modal .close{position:absolute;top:15px;right:25px;color:#fff;font-size:30px;cursor:pointer;}
 .modal iframe{width:90%;height:80vh;border:none;border-radius:10px;background:#000;}
 .modal-actions{margin-top:15px;display:flex;justify-content:center;gap:10px;}
@@ -2757,6 +2777,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
