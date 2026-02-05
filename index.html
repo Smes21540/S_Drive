@@ -640,6 +640,11 @@ body[data-theme="orange"] #smes-footer-bg {
        style="display:none; width:90%; height:80vh; border:none; border-radius:10px; background:#000;">
 </video>
 
+<img id="modalImg"
+     style="display:none; max-width:90%; max-height:80vh; border-radius:10px; background:#000;"
+     alt="Aperçu" />
+
+
 <div class="modal-actions">
   <button id="prevBtn">&larr; Précédent</button>
   <button id="nextBtn">Suivant &rarr;</button>
@@ -1604,7 +1609,7 @@ if (
 
 
 
-if(/\.(jpg|jpeg)$/i.test(f.name)){
+if(/\.(jpg|jpeg|png|gif|webp)$/i.test(f.name)){
   html+=`<img src="https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&site=Smes_Acces"
     onclick="openModal('${f.id}')"
     alt="aperçu">`;
@@ -1613,6 +1618,7 @@ if(/\.(jpg|jpeg)$/i.test(f.name)){
           <button class="action-btn">Télécharger</button>
         </a>`;
 }
+
 
 /* ✅ VIDEO (MP4/WEBM/MOV/M4V) */
 if(/\.(mp4|webm|mov|m4v)$/i.test(f.name)){
@@ -1807,28 +1813,37 @@ function openModal(id) {
 
   const frame = document.getElementById('modalFrame');
   const video = document.getElementById('modalVideo');
+  const img   = document.getElementById('modalImg');
 
   currentPreviewIndex = previewFiles.findIndex(f => f.id === id);
   const file = previewFiles[currentPreviewIndex];
   if (!file) return;
 
   const url = `https://smes21540.netlify.app/.netlify/functions/drive?id=${id}&name=${encodeURIComponent(file.name)}&site=Smes_Acces`;
+
   const isVideo = /\.(mp4|webm|mov|m4v)$/i.test(file.name);
+  const isPdf   = /\.pdf$/i.test(file.name);
+  const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(file.name);
+
+  // reset
+  frame.style.display = "none"; frame.src = "";
+  video.pause(); video.style.display = "none"; video.src = "";
+  img.style.display = "none"; img.src = "";
 
   if (isVideo) {
-    // mode vidéo
-    frame.style.display = "none";
-    frame.src = "";
-
     video.style.display = "block";
     video.src = url;
     video.load();
-  } else {
-    // mode iframe (pdf + images)
-    video.pause();
-    video.style.display = "none";
-    video.src = "";
 
+  } else if (isPdf) {
+    frame.style.display = "block";
+    frame.src = url;
+
+  } else if (isImage) {
+    img.style.display = "block";
+    img.src = url;
+
+  } else {
     frame.style.display = "block";
     frame.src = url;
   }
@@ -1843,15 +1858,23 @@ function openModal(id) {
 
 
 
+
 function closeModal(){
   const video = document.getElementById('modalVideo');
   const frame = document.getElementById('modalFrame');
+  const img   = document.getElementById('modalImg');
 
   if (video) {
     video.pause();
     video.src = "";
     video.style.display = "none";
   }
+
+  if (img) {
+    img.src = "";
+    img.style.display = "none";
+  }
+
   if (frame) {
     frame.src = "";
     frame.style.display = "block";
@@ -1859,6 +1882,7 @@ function closeModal(){
 
   document.getElementById('imageModal').style.display='none';
 }
+
 
 
 document.getElementById('prevBtn').onclick = () => {
@@ -2732,6 +2756,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
