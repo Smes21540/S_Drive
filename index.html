@@ -227,30 +227,59 @@ tbody tr:hover .action-btn{opacity:1;visibility:visible;}
 
 /* Modale images */
 .modal{
-+  display:none;            /* fermé par défaut */
-   position:fixed;
-   z-index:1300;
-   left:0;
-   top:0;
-   width:100%;
-   height:100%;
-   background-color:var(--overlay);
+  display:none;                 /* ✅ fermée par défaut */
+  position:fixed;
+  z-index:1300;
+  inset:0;                      /* ✅ remplace left/top/width/height */
+  background-color:var(--overlay);
 
-   /* centrage via flex (mais activé seulement à l'ouverture) */
--  display: flex;
-   flex-direction: column;
-   justify-content: center;
-   align-items: center;
+  /* ✅ centrage via flex */
+  justify-content:center;
+  align-items:center;
+  flex-direction:column;
 
-   padding: 20px;
-   box-sizing: border-box;
+  padding:20px;
+  box-sizing:border-box;
 }
 
-.modal .close{position:absolute;top:15px;right:25px;color:#fff;font-size:30px;cursor:pointer;}
-.modal iframe{width:90%;height:80vh;border:none;border-radius:10px;background:#000;}
+.modal .close{
+  position:absolute;
+  top:15px;
+  right:25px;
+  color:#fff;
+  font-size:30px;
+  cursor:pointer;
+}
+
+.modal iframe{
+  width:min(90vw, 1200px);
+  height:80vh;
+  border:none;
+  border-radius:10px;
+  background:#000;
+}
+
+#modalVideo{
+  width:min(90vw, 1200px);
+  height:80vh;
+  border:none;
+  border-radius:10px;
+  background:#000;
+}
+
+#modalImg{
+  display:block;
+  max-width:min(90vw, 1200px);
+  max-height:80vh;
+  border-radius:10px;
+  background:#000;
+  object-fit:contain;
+}
+
 .modal-actions{margin-top:15px;display:flex;justify-content:center;gap:10px;}
 .modal-actions button{background:var(--accent);color:#fff;border:none;padding:8px 16px;border-radius:5px;cursor:pointer;font-weight:bold;}
 .modal-actions button:hover{background:var(--accent-darker);}
+
 
 /* Overlay ZIP */
 #zipOverlay{
@@ -1829,16 +1858,17 @@ function getPreviewType(fileName){
 /* ----------- Modale images / pdf / video + navigation ----------- */
 
 function openModal(id) {
+  currentPreviewIndex = previewFiles.findIndex(f => f.id === id);
+  const file = previewFiles[currentPreviewIndex];
+  if (!file) return; // ✅ n'ouvre pas une modale vide
+
   const modal = document.getElementById('imageModal');
-  modal.style.display = 'flex'; // ✅ IMPORTANT : garde le centrage
+  modal.style.display = 'flex';
 
   const frame = document.getElementById('modalFrame');
   const video = document.getElementById('modalVideo');
   const img   = document.getElementById('modalImg');
 
-  currentPreviewIndex = previewFiles.findIndex(f => f.id === id);
-  const file = previewFiles[currentPreviewIndex];
-  if (!file) return;
 
   const url =
     `https://smes21540.netlify.app/.netlify/functions/drive` +
@@ -2810,6 +2840,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
