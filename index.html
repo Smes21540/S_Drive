@@ -633,12 +633,19 @@ body[data-theme="orange"] #smes-footer-bg {
 <div id="imageModal" class="modal" role="dialog" aria-modal="true">
   <span class="close" onclick="closeModal()" aria-label="Fermer">&times;</span>
   <!-- tabindex=-1 pour éviter que l'iframe vole le focus / bloque les flèches -->
-  <iframe id="modalFrame" tabindex="-1"></iframe>
-  <div class="modal-actions">
-    <button id="prevBtn">&larr; Précédent</button>
-    <button id="nextBtn">Suivant &rarr;</button>
-    <button id="downloadBtn">Télécharger</button>
-  </div>
+<iframe id="modalFrame" tabindex="-1"></iframe>
+
+<video id="modalVideo"
+       controls
+       style="display:none; width:90%; height:80vh; border:none; border-radius:10px; background:#000;">
+</video>
+
+<div class="modal-actions">
+  <button id="prevBtn">&larr; Précédent</button>
+  <button id="nextBtn">Suivant &rarr;</button>
+  <button id="downloadBtn">Télécharger</button>
+</div>
+
 </div>
 
 <!-- Overlay ZIP -->
@@ -1153,13 +1160,10 @@ console.log("[Folder] Chemin complet enregistré :", fullPath);
 
   // Charger fichiers CSV/JPG classiques du dossier
   const files = await fetchFolderContents(li.dataset.id);
-const filtered = files.filter(f => 
-  f.name.toLowerCase().endsWith('.csv') || 
-  f.name.toLowerCase().endsWith('.jpg') || 
-  f.name.toLowerCase().endsWith('.jpeg') ||
-  f.name.toLowerCase().endsWith('.json') ||
-  f.name.toLowerCase().endsWith('.pdf')
+const filtered = files.filter(f =>
+  /\.(csv|jpg|jpeg|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(f.name)
 );
+
 
 
 
@@ -1222,7 +1226,8 @@ document.querySelectorAll('#csvTable tbody tr').forEach(tr => {
   }
 }
 
-previewFiles = filtered.filter(f => /\.(jpg|jpeg|pdf)$/i.test(f.name));
+previewFiles = filtered.filter(f => /\.(jpg|jpeg|pdf|mp4|gif|webm|mov|m4v)$/i.test(f.name));
+
 displayFiles(filtered, nameSpan ? nameSpan.textContent : '');
 
 
@@ -1622,6 +1627,16 @@ if (f.name.toLowerCase().endsWith(".pdf")) {
   `;
 }
 
+// === PowerPoint (ppsx/pptx) ===
+if (/\.(ppsx|pptx)$/i.test(f.name)) {
+  html += `
+    <a href="https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&download=1&site=Smes_Acces" target="_blank">
+      <button class="action-btn">Télécharger</button>
+    </a>
+  `;
+}
+
+  
 
 
     tdAction.innerHTML=html;
@@ -1773,16 +1788,35 @@ function getPreviewType(fileName){
 function openModal(id) {
   const modal = document.getElementById('imageModal');
   modal.style.display = 'block';
+
   const frame = document.getElementById('modalFrame');
+  const video = document.getElementById('modalVideo');
 
   currentPreviewIndex = previewFiles.findIndex(f => f.id === id);
   const file = previewFiles[currentPreviewIndex];
   if (!file) return;
 
-  // ✅ Aperçu via ton proxy Netlify (marche aussi en accès limité)
-  frame.src = `https://smes21540.netlify.app/.netlify/functions/drive?id=${id}&name=${encodeURIComponent(file.name)}&site=Smes_Acces`;
+  const url = `https://smes21540.netlify.app/.netlify/functions/drive?id=${id}&name=${encodeURIComponent(file.name)}&site=Smes_Acces`;
+  const isVideo = /\.(mp4|webm|mov|m4v)$/i.test(file.name);
 
-  // ✅ Download via ton proxy Netlify
+  if (isVideo) {
+    // mode vidéo
+    frame.style.display = "none";
+    frame.src = "";
+
+    video.style.display = "block";
+    video.src = url;
+    video.load();
+  } else {
+    // mode iframe (pdf + images)
+    video.pause();
+    video.style.display = "none";
+    video.src = "";
+
+    frame.style.display = "block";
+    frame.src = url;
+  }
+
   document.getElementById('downloadBtn').onclick = () =>
     window.open(
       `https://smes21540.netlify.app/.netlify/functions/drive?id=${id}&name=${encodeURIComponent(file.name)}&download=1&site=Smes_Acces`,
@@ -1792,7 +1826,24 @@ function openModal(id) {
 
 
 
-function closeModal(){document.getElementById('imageModal').style.display='none';}
+
+function closeModal(){
+  const video = document.getElementById('modalVideo');
+  const frame = document.getElementById('modalFrame');
+
+  if (video) {
+    video.pause();
+    video.src = "";
+    video.style.display = "none";
+  }
+  if (frame) {
+    frame.src = "";
+    frame.style.display = "block";
+  }
+
+  document.getElementById('imageModal').style.display='none';
+}
+
 
 document.getElementById('prevBtn').onclick = () => {
   if (currentPreviewIndex > 0) openModal(previewFiles[--currentPreviewIndex].id);
@@ -2665,6 +2716,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
