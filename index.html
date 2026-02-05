@@ -1612,8 +1612,18 @@ if(/\.(jpg|jpeg)$/i.test(f.name)){
   html+=`<a href="https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&download=1&site=Smes_Acces" target="_blank">
           <button class="action-btn">Télécharger</button>
         </a>`;
-
 }
+
+/* ✅ VIDEO (MP4/WEBM/MOV/M4V) */
+if(/\.(mp4|webm|mov|m4v)$/i.test(f.name)){
+  html += `
+    <button class="action-btn" onclick="openModal('${f.id}')">Ouvrir</button>
+    <a href="https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&download=1&site=Smes_Acces" target="_blank">
+      <button class="action-btn">Télécharger</button>
+    </a>
+  `;
+}
+
 
 
 // === PDF ===
@@ -1629,12 +1639,18 @@ if (f.name.toLowerCase().endsWith(".pdf")) {
 
 // === PowerPoint (ppsx/pptx) ===
 if (/\.(ppsx|pptx)$/i.test(f.name)) {
+  const baseUrl = `https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`;
+
   html += `
-    <a href="https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&download=1&site=Smes_Acces" target="_blank">
+    <a href="${baseUrl}&download=1" target="_blank">
       <button class="action-btn">Télécharger</button>
+    </a>
+    <a href="${baseUrl}" target="_blank">
+      <button class="action-btn">Ouvrir</button>
     </a>
   `;
 }
+
 
   
 
@@ -2716,6 +2732,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
