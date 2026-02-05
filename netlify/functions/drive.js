@@ -3,8 +3,6 @@
 // Vars requises côté Netlify: GOOGLE_SERVICE_ACCOUNT_JSON (JSON complet) et facultatif: DOMAINS_ALLOWED (CSV)
 
 import { google } from "googleapis";
-import { stream } from "@netlify/functions";
-
 
 /* =========================
    Utils: CORS & Retry
@@ -95,7 +93,7 @@ async function getAccessTokenFromServiceAccount() {
    Handler Netlify
    ========================= */
 
-export const handler = stream(async (event, context) => {
+export async function handler(event, context) {
   const method = event.httpMethod || "GET";
   const originHeader = event.headers?.origin || event.headers?.Origin || "";
   const allowOrigin = parseAllowedOrigins(originHeader);
@@ -241,26 +239,27 @@ if (list) {
 }
 
 
-// Téléchargement d'un fichier (STREAM)
-const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?alt=media&supportsAllDrives=true`;
+      // Téléchargement d'un fichier
+      const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?alt=media&supportsAllDrives=true`;
+      const response = await fetchWithRetry(url, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
 
-const response = await fetchWithRetry(url, {
-  headers: { Authorization: `Bearer ${token}` }
-});
+      if (!response.ok) {
+        const errTxt = await response.text().catch(() => "");
+        console.error("Erreur Google Drive GET:", response.status, errTxt);
+        return corsResponse({ statusCode: response.status, body: "Erreur Google Drive" }, allowOrigin);
+      }
 
-if (!response.ok) {
-  const errTxt = await response.text().catch(() => "");
-  console.error("Erreur Google Drive GET:", response.status, errTxt);
-  return corsResponse({ statusCode: response.status, body: "Erreur Google Drive" }, allowOrigin);
-}
+      const arrayBuf = await response.arrayBuffer();
+      const contentType = response.headers.get("content-type") || "application/octet-stream";
 
-const contentType = response.headers.get("content-type") || "application/octet-stream";
+      // Cache court pour les fichiers "du jour"
+      const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+      const isTodayFile = name.includes(today);
+      const cacheSeconds = isTodayFile ? 60 : 3600;
 
-// Cache court pour les fichiers "du jour"
-const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-const isTodayFile = name.includes(today);
-const cacheSeconds = isTodayFile ? 60 : 3600;
-
+// ✅ helpers filename safe + RFC5987
 const safeName = (name || "fichier")
   .replace(/[\/\\:*?"<>|]/g, "_")
   .replace(/"/g, "'")
@@ -268,24 +267,12 @@ const safeName = (name || "fichier")
 
 const encodedName = encodeURIComponent(safeName);
 
+// ✅ Content-Disposition si on veut forcer le download
 const contentDisposition = download
   ? `attachment; filename="${safeName}"; filename*=UTF-8''${encodedName}`
   : `inline; filename="${safeName}"; filename*=UTF-8''${encodedName}`;
 
-return {
-import { Readable } from "node:stream"; // <-- ajoute cet import en haut du fichier si tu utilises ce bloc
-
-// ...
-
-const webStream = response.body;
-
-// Sécurité: si le runtime exige un stream Node, on convertit.
-// Si Netlify accepte directement le Web ReadableStream, ça passe aussi.
-const nodeStream =
-  webStream && typeof Readable.fromWeb === "function"
-    ? Readable.fromWeb(webStream)
-    : webStream;
-
+// Binaire encodé en Base64 (format Netlify)
 return {
   statusCode: 200,
   headers: {
@@ -293,18 +280,20 @@ return {
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
     "Access-Control-Max-Age": "600",
-
     "Content-Type": contentType,
+
+    // ✅ le truc qui change tout
     "Content-Disposition": contentDisposition,
+
+    // optionnel mais pratique
+    "Content-Length": String(arrayBuf.byteLength),
 
     "Cache-Control": `public, max-age=${cacheSeconds}, must-revalidate`,
     "Netlify-CDN-Cache-Control": `public, max-age=${cacheSeconds}, must-revalidate`,
   },
-
-  body: nodeStream
+  body: Buffer.from(arrayBuf).toString("base64"),
+  isBase64Encoded: true
 };
-
-
 
     } catch (err) {
       console.error("Erreur proxy Drive (GET):", err);
@@ -318,4 +307,4 @@ return {
     headers: { "Allow": "GET, POST, OPTIONS" },
     body: "Méthode non autorisée"
   }, allowOrigin);
-});
+}
