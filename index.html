@@ -1166,8 +1166,9 @@ console.log("[Folder] Chemin complet enregistré :", fullPath);
   // Charger fichiers CSV/JPG classiques du dossier
   const files = await fetchFolderContents(li.dataset.id);
 const filtered = files.filter(f =>
-  /\.(csv|jpg|jpeg|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(f.name)
+  /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(f.name)
 );
+
 
 
 
@@ -2756,6 +2757,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
