@@ -227,24 +227,23 @@ tbody tr:hover .action-btn{opacity:1;visibility:visible;}
 
 /* Modale images */
 .modal{
-  display:none;
-  position:fixed;
-  z-index:1300;
-  left:0;
-  top:0;
-  width:100%;
-  height:100%;
++  display:none;            /* fermé par défaut */
+   position:fixed;
+   z-index:1300;
+   left:0;
+   top:0;
+   width:100%;
+   height:100%;
+   background-color:var(--overlay);
 
-  background-color:var(--overlay);
+   /* centrage via flex (mais activé seulement à l'ouverture) */
+-  display: flex;
+   flex-direction: column;
+   justify-content: center;
+   align-items: center;
 
-  /* ✅ centrage réel */
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-
-  padding: 20px;
-  box-sizing: border-box;
+   padding: 20px;
+   box-sizing: border-box;
 }
 
 .modal .close{position:absolute;top:15px;right:25px;color:#fff;font-size:30px;cursor:pointer;}
@@ -1827,10 +1826,11 @@ function getPreviewType(fileName){
 
 
   
-/* ----------- Modale images + navigation clavier ----------- */
+/* ----------- Modale images / pdf / video + navigation ----------- */
+
 function openModal(id) {
   const modal = document.getElementById('imageModal');
-  modal.style.display = 'block';
+  modal.style.display = 'flex'; // ✅ IMPORTANT : garde le centrage
 
   const frame = document.getElementById('modalFrame');
   const video = document.getElementById('modalVideo');
@@ -1840,94 +1840,127 @@ function openModal(id) {
   const file = previewFiles[currentPreviewIndex];
   if (!file) return;
 
-  const url = `https://smes21540.netlify.app/.netlify/functions/drive?id=${id}&name=${encodeURIComponent(file.name)}&site=Smes_Acces`;
+  const url =
+    `https://smes21540.netlify.app/.netlify/functions/drive` +
+    `?id=${id}&name=${encodeURIComponent(file.name)}&site=Smes_Acces`;
 
   const isVideo = /\.(mp4|webm|mov|m4v)$/i.test(file.name);
   const isPdf   = /\.pdf$/i.test(file.name);
   const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(file.name);
 
-  // reset
-  frame.style.display = "none"; frame.src = "";
-  video.pause(); video.style.display = "none"; video.src = "";
-  img.style.display = "none"; img.src = "";
+  // 🔄 Reset complet
+  frame.style.display = "none";
+  frame.src = "";
 
+  video.pause();
+  video.style.display = "none";
+  video.src = "";
+
+  img.style.display = "none";
+  img.src = "";
+
+  // 🎯 Affichage selon type
   if (isVideo) {
+
     video.style.display = "block";
     video.src = url;
     video.load();
 
   } else if (isPdf) {
+
     frame.style.display = "block";
     frame.src = url;
 
   } else if (isImage) {
+
     img.style.display = "block";
     img.src = url;
 
   } else {
+
+    // fallback
     frame.style.display = "block";
     frame.src = url;
   }
 
-  document.getElementById('downloadBtn').onclick = () =>
+  // ⬇️ Bouton téléchargement
+  document.getElementById('downloadBtn').onclick = () => {
     window.open(
-      `https://smes21540.netlify.app/.netlify/functions/drive?id=${id}&name=${encodeURIComponent(file.name)}&download=1&site=Smes_Acces`,
+      `https://smes21540.netlify.app/.netlify/functions/drive` +
+      `?id=${id}&name=${encodeURIComponent(file.name)}` +
+      `&download=1&site=Smes_Acces`,
       '_blank'
     );
+  };
 }
 
 
-
-
+/* ----------- Fermeture modale ----------- */
 
 function closeModal(){
-  const video = document.getElementById('modalVideo');
+
+  const modal = document.getElementById('imageModal');
+  modal.style.display = 'none';
+
   const frame = document.getElementById('modalFrame');
+  const video = document.getElementById('modalVideo');
   const img   = document.getElementById('modalImg');
 
-  if (video) {
-    video.pause();
-    video.src = "";
-    video.style.display = "none";
-  }
+  // stop + nettoyage
+  frame.src = "";
 
-  if (img) {
-    img.src = "";
-    img.style.display = "none";
-  }
+  video.pause();
+  video.src = "";
+  video.style.display = "none";
 
-  if (frame) {
-    frame.src = "";
-    frame.style.display = "block";
-  }
-
-  document.getElementById('imageModal').style.display='none';
+  img.src = "";
+  img.style.display = "none";
 }
 
 
+/* ----------- Boutons navigation ----------- */
 
 document.getElementById('prevBtn').onclick = () => {
-  if (currentPreviewIndex > 0) openModal(previewFiles[--currentPreviewIndex].id);
+  if (currentPreviewIndex > 0) {
+    openModal(previewFiles[--currentPreviewIndex].id);
+  }
 };
+
 document.getElementById('nextBtn').onclick = () => {
-  if (currentPreviewIndex < previewFiles.length - 1) openModal(previewFiles[++currentPreviewIndex].id);
+  if (currentPreviewIndex < previewFiles.length - 1) {
+    openModal(previewFiles[++currentPreviewIndex].id);
+  }
 };
 
-window.addEventListener('click',e=>{if(e.target===document.getElementById('imageModal')) closeModal();});
 
-// Navigation clavier quand la modale est ouverte
-window.addEventListener('keydown', e=>{
-  const modal=document.getElementById('imageModal');
-  if(modal.style.display==='block'){
-    if(e.key==='ArrowLeft' && currentPreviewIndex>0){
-      openModal(previewFiles[--currentPreviewIndex].id);
-    }
-    if(e.key==='ArrowRight' && currentPreviewIndex<previewFiles.length-1){
-      openModal(previewFiles[++currentPreviewIndex].id);
-    }
-    if(e.key==='Escape'){ closeModal(); }
+/* ----------- Click hors contenu = fermer ----------- */
+
+window.addEventListener('click', e => {
+  const modal = document.getElementById('imageModal');
+  if (e.target === modal) closeModal();
+});
+
+
+/* ----------- Navigation clavier ----------- */
+
+window.addEventListener('keydown', e => {
+
+  const modal = document.getElementById('imageModal');
+  if (modal.style.display !== 'flex') return;
+
+  if (e.key === 'ArrowLeft' && currentPreviewIndex > 0) {
+    openModal(previewFiles[--currentPreviewIndex].id);
+  }
+
+  if (e.key === 'ArrowRight' && currentPreviewIndex < previewFiles.length - 1) {
+    openModal(previewFiles[++currentPreviewIndex].id);
+  }
+
+  if (e.key === 'Escape') {
+    closeModal();
   }
 });
+
 
 
 /* ----------- ZIP overlay + progression + annulation ----------- */
@@ -2777,6 +2810,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
