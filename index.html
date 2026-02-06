@@ -1099,6 +1099,16 @@ const spinner=document.getElementById('spinner');
 function showSpinner(){spinner.style.display='block';}
 function hideSpinner(){spinner.style.display='none';}
 
+function getSiteRootLi(li){
+  let cur = li;
+  while (cur && cur.parentElement && cur.parentElement.closest("li")) {
+    cur = cur.parentElement.closest("li");
+  }
+  return cur; // dossier racine du site
+}
+
+
+
 function updateNetworkStatus(){
   document.getElementById("netAlert").style.display = navigator.onLine ? "none" : "block";
 }
@@ -1428,14 +1438,16 @@ const filtered = files.filter(f =>
 
 
 
-// 🧭 Détermination du site courant
-const siteLi = li.parentElement.closest("li");
-let siteId = siteLi?.dataset.id || null;
+// 🧭 Détermination du site courant (toujours la racine du site)
+const siteRootLi = getSiteRootLi(li);
+const siteId = siteRootLi?.dataset.id || null;
+
 
 if (siteId && siteId !== currentSiteId) {
   clearSiteHotDays();
   currentSiteId = siteId;
-  console.log(`[SITE] Changement de site → ${siteLi.querySelector(".folder-name")?.textContent}`);
+  console.log(`[SITE] Changement de site → ${siteRootLi?.querySelector(".folder-name")?.textContent}`);
+
 
   // ✅ Campagnes (2024/2025...) depuis le dossier parent du site
   await refreshCampaignUIForSite(siteId);
@@ -1443,7 +1455,8 @@ if (siteId && siteId !== currentSiteId) {
 // 🔥 Lancer le scan en arrière-plan sans bloquer l'affichage
 scanSiteHotDays(siteId).then(map => {
   hotDaysMap = map;
-  console.log(`[CACHE] 🔥 ${Object.keys(hotDaysMap).length} jours chauds détectés et chargés pour ${siteLi.querySelector(".folder-name")?.textContent}`);
+  console.log(`[CACHE] 🔥 ${Object.keys(hotDaysMap).length} jours chauds détectés et chargés pour ${siteRootLi?.querySelector(".folder-name")?.textContent}`);
+
 
 // 🪄 Rafraîchir seulement les flammes dans le tableau actuel sans supprimer les notes 📝
 document.querySelectorAll('#csvTable tbody tr').forEach(tr => {
@@ -3058,6 +3071,8 @@ if (last) {
 };
 
 
+  
+
 </script>
 
 <!-- === Fonction de nettoyage du cache === -->
@@ -3093,6 +3108,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
