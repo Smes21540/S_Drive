@@ -632,17 +632,20 @@ body[data-theme="orange"] #smes-footer-bg {
 /* ✅ Campagne sélectionnée : effet beaucoup plus visible */
 .campaign-btn.active{
   background: linear-gradient(180deg, var(--accent), var(--accent-darker));
-  border: 3px solid var(--danger);              /* bordure forte */
+  border: 3px solid var(--danger);
+  outline: 1px solid #000;      /* ✅ trait noir 1px autour */
+  outline-offset: 0;            /* collé au bouton */
   color: var(--accent-contrast);
 
   box-shadow:
-    0 0 0 3px rgba(255,255,255,0.6),            /* liseré clair */
-    0 8px 16px rgba(0,0,0,0.25),                /* ombre */
-    0 0 12px rgba(255,112,67,0.6);              /* halo */
+    0 0 0 3px rgba(255,255,255,0.6),
+    0 8px 16px rgba(0,0,0,0.25),
+    0 0 12px rgba(255,112,67,0.6);
 
-  transform: scale(1.03);                      /* léger zoom */
-  filter: saturate(1.2) contrast(1.1);         /* couleurs + punch */
+  transform: scale(1.03);
+  filter: saturate(1.2) contrast(1.1);
 }
+
 
 
 
@@ -3087,6 +3090,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
