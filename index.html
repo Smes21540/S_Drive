@@ -648,7 +648,49 @@ body[data-theme="orange"] #smes-footer-bg {
 
 
 
+/* === Tuiles “grosses icônes” (page principale) === */
+.site-tiles{
+  display:grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap:14px;
+  margin: 0 0 14px 0;
+  padding: 8px;
+}
 
+.site-tile{
+  background: var(--panel);
+  border: 2px solid var(--accent-muted);
+  border-radius: 14px;
+  box-shadow: 0 4px 12px var(--shadow);
+  padding: 14px 12px;
+  cursor: pointer;
+  transition: transform .15s ease, filter .15s ease, border-color .15s ease;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  min-height: 120px;
+  user-select:none;
+}
+
+.site-tile:hover{
+  transform: scale(1.02);
+  filter: brightness(1.02);
+  border-color: var(--accent);
+}
+
+.site-tile .icon{
+  font-size: 44px;
+  line-height: 1;
+  margin-bottom: 10px;
+}
+
+.site-tile .label{
+  font-weight: 800;
+  color: var(--accent-darker);
+  text-align:center;
+  word-break: break-word;
+}
 
 
 
@@ -708,6 +750,8 @@ body[data-theme="orange"] #smes-footer-bg {
   <button id="exportExcelGazBtn" style="display:none;" title="Exporter les données en Excel (kWh, m³, durée, tonnage)">Export Excel</button>
 </div>
 
+<!-- ✅ Tuiles dossiers (page principale) -->
+<div id="siteTiles" class="site-tiles" style="display:none;"></div>
 
 
   <div id="tableWrapper">
@@ -1183,9 +1227,9 @@ async function fetchFolderContents(folderId){
 
 
 async function loadRootFolders(){
-  const files = await fetchFolderContents(ROOT_FOLDER_ID);
-  const rootUL = document.getElementById('folderTree');
-  rootUL.innerHTML = '';
+const files = await fetchFolderContents(ROOT_FOLDER_ID);
+const rootUL = document.getElementById('folderTree');
+rootUL.innerHTML = '';
 
 // 🔒 Cacher les filtres quand on revient à la racine
 document.querySelector(".controls").style.display = "none";
@@ -1194,55 +1238,46 @@ const cb = document.getElementById("campaignBox");
 if (cb) cb.style.display = "none";
 activeCampaignKey = "";
 
-
-  
-  files
+// ✅ Liste dossiers racine
+const rootFolders = files
   .filter(f => f.mimeType === 'application/vnd.google-apps.folder')
-  .sort((a,b) => a.name.localeCompare(b.name, 'fr', { sensitivity:'base' }))
-  .forEach(f => {
+  .sort((a,b) => a.name.localeCompare(b.name, 'fr', { sensitivity:'base' }));
 
-    const li = document.createElement('li'); 
-    li.dataset.id = f.id;
+// ✅ Remplit les tuiles à droite (uniquement si non vide)
+renderRootTiles(rootFolders);
 
-    const toggle = document.createElement('span'); 
-    toggle.className = 'folder-toggle'; 
-    toggle.textContent = '';
-    toggle.onclick = () => toggleFolder(li);
+// ✅ Remplit la sidebar comme avant
+rootFolders.forEach(f => {
+  const li = document.createElement('li');
+  li.dataset.id = f.id;
 
-const span = document.createElement('span');
-span.className = 'folder-name';
+  const toggle = document.createElement('span');
+  toggle.className = 'folder-toggle';
+  toggle.textContent = '';
+  toggle.onclick = () => toggleFolder(li);
 
-const lowerName = f.name.toLowerCase();
+  const span = document.createElement('span');
+  span.className = 'folder-name';
 
-if (lowerName.includes("gaz")) {
-  span.innerHTML = `⛽ ${f.name}`;
-} else if (lowerName.includes("echantillonnage")) {
-  span.innerHTML = `📖 ${f.name}`;
-} else if (lowerName.includes("capture")) {
-  span.innerHTML = `🖼️ ${f.name}`;
-} else if (lowerName.includes("rapport")) {
-  span.innerHTML = `📄 ${f.name}`;
-} else if (lowerName.includes("historique")) {
-  span.innerHTML = `🗂️ ${f.name}`;
-} else if (lowerName.includes("traça_temp") || lowerName.includes("traca_temp")) {
-  span.innerHTML = `📈 ${f.name}`;
-} else {
-  span.textContent = f.name;
-}
+  const lowerName = f.name.toLowerCase();
+  if (lowerName.includes("gaz")) span.innerHTML = `⛽ ${f.name}`;
+  else if (lowerName.includes("echantillonnage")) span.innerHTML = `📖 ${f.name}`;
+  else if (lowerName.includes("capture")) span.innerHTML = `🖼️ ${f.name}`;
+  else if (lowerName.includes("rapport")) span.innerHTML = `📄 ${f.name}`;
+  else if (lowerName.includes("historique")) span.innerHTML = `🗂️ ${f.name}`;
+  else if (lowerName.includes("traça_temp") || lowerName.includes("traca_temp")) span.innerHTML = `📈 ${f.name}`;
+  else span.textContent = f.name;
 
+  span.onclick = (e) => {
+    hideSiteTiles();                 // ✅ dès qu’on clique un dossier, on quitte la page principale
+    loadFolderFilesOnClick(li, e);
+  };
 
+  li.appendChild(toggle);
+  li.appendChild(span);
+  rootUL.appendChild(li);
+});
 
-
-span.onclick = (e) => loadFolderFilesOnClick(li, e);
-
-
-
-
-
-    li.appendChild(toggle); 
-    li.appendChild(span); 
-    rootUL.appendChild(li);
-  });
 
   // 🔥 Vérifier automatiquement deux crans plus bas sans ouvrir visuellement
   setTimeout(async () => {
@@ -1530,6 +1565,9 @@ if (Object.keys(hotDaysMap).length > 0) {
 }
 
 async function displayFiles(files, folderName){
+
+  hideSiteTiles();
+
 
   const tbody=document.querySelector('#csvTable tbody');
   const downloadBtn=document.getElementById('downloadFolderBtn');
@@ -3060,6 +3098,61 @@ function initYearSelect(){
 const ys = document.getElementById("yearSelect");
 if (ys) ys.value = "";
 
+
+
+function showSiteTiles(){
+  const tiles = document.getElementById("siteTiles");
+  if (tiles) tiles.style.display = "grid";
+}
+
+function hideSiteTiles(){
+  const tiles = document.getElementById("siteTiles");
+  if (tiles) tiles.style.display = "none";
+}
+
+function renderRootTiles(folders){
+  const tiles = document.getElementById("siteTiles");
+  if (!tiles) return;
+
+  tiles.innerHTML = "";
+
+  // ✅ S’il n’y a aucun dossier racine → on ne montre pas les tuiles (comme avant)
+  if (!folders || folders.length === 0){
+    hideSiteTiles();
+    return;
+  }
+
+  folders.forEach(f => {
+    const div = document.createElement("div");
+    div.className = "site-tile";
+    div.innerHTML = `
+      <div class="icon">📁</div>
+      <div class="label">${f.name}</div>
+    `;
+
+    div.onclick = async () => {
+      // ✅ cache les tuiles dès qu’on quitte la racine
+      hideSiteTiles();
+
+      // ✅ retrouve le LI correspondant dans la sidebar et simule un clic
+      const li = document.querySelector(`#folderTree > li[data-id="${f.id}"]`);
+      if (li) {
+        await toggleFolder(li);              // ouvre le site (affiche sous-dossiers)
+        // option: le sélectionner visuellement
+        document.querySelectorAll('#folderTree li span.folder-name').forEach(s => s.classList.remove('active-folder'));
+        const nameSpan = li.querySelector('span.folder-name');
+        if (nameSpan) nameSpan.classList.add('active-folder');
+        li.scrollIntoView({block:"center"});
+      }
+    };
+
+    tiles.appendChild(div);
+  });
+
+  showSiteTiles();
+}
+
+
   
 
 /* ----------- Init ----------- */
@@ -3127,6 +3220,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
