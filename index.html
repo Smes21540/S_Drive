@@ -695,7 +695,7 @@ body[data-theme="orange"] #smes-footer-bg {
 
   <!-- ✅ Boutons campagne auto (2024/2025...) -->
   <div id="campaignBox" class="campaign-box" style="display:none;">
-    <div class="campaign-title">Campagnes :</div>
+    <div class="campaign-title">Campagnes de séchage :</div>
     <div id="campaignButtons" class="campaign-buttons"></div>
   </div>
 
@@ -899,7 +899,7 @@ let label = (c.fileName || key)
   .trim();
 
 btn.textContent =
-  `📌 Campagne ${label} (${c.start.split("-").reverse().join("/")} → ${c.end.split("-").reverse().join("/")})`;
+  `Campagne ${label} (${c.start.split("-").reverse().join("/")} → ${c.end.split("-").reverse().join("/")})`;
 
 
     btn.onclick = async () => {
@@ -3087,6 +3087,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
