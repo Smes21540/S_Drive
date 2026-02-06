@@ -1268,10 +1268,15 @@ rootFolders.forEach(f => {
   else if (lowerName.includes("traça_temp") || lowerName.includes("traca_temp")) span.innerHTML = `📈 ${f.name}`;
   else span.textContent = f.name;
 
-  span.onclick = (e) => {
-    hideSiteTiles();                 // ✅ dès qu’on clique un dossier, on quitte la page principale
-    loadFolderFilesOnClick(li, e);
-  };
+span.onclick = async (e) => {
+  // ✅ clic site (racine) → tuiles des sous-dossiers si il y en a
+  e?.stopPropagation?.();
+  await openSiteAndShowTiles(li.dataset.id, (span.textContent || "").trim());
+
+  // si tu veux que le clic sur le site n'ouvre PAS de fichiers (normal, c'est un site)
+  // on ne fait pas loadFolderFilesOnClick ici.
+};
+
 
   li.appendChild(toggle);
   li.appendChild(span);
@@ -3100,15 +3105,28 @@ if (ys) ys.value = "";
 
 
 
+function showTable(){
+  const tw = document.getElementById("tableWrapper");
+  if (tw) tw.style.display = "block";
+}
+
+function hideTable(){
+  const tw = document.getElementById("tableWrapper");
+  if (tw) tw.style.display = "none";
+}
+
 function showSiteTiles(){
   const tiles = document.getElementById("siteTiles");
   if (tiles) tiles.style.display = "grid";
+  hideTable(); // ✅ cache le tableau → plus de colonnes vides visibles
 }
 
 function hideSiteTiles(){
   const tiles = document.getElementById("siteTiles");
   if (tiles) tiles.style.display = "none";
+  showTable(); // ✅ on remet le tableau dès qu'on sort des tuiles
 }
+
 
 function renderRootTiles(folders){
   const tiles = document.getElementById("siteTiles");
@@ -3130,19 +3148,82 @@ function renderRootTiles(folders){
       <div class="label">${f.name}</div>
     `;
 
+div.onclick = async () => {
+  // ✅ choisir un site → afficher ses dossiers en tuiles
+  await openSiteAndShowTiles(f.id, f.name);
+
+  // option: surlignage du site dans la sidebar
+  const li = document.querySelector(`#folderTree > li[data-id="${f.id}"]`);
+  if (li) {
+    document.querySelectorAll('#folderTree li span.folder-name')
+      .forEach(s => s.classList.remove('active-folder'));
+    const nameSpan = li.querySelector('span.folder-name');
+    if (nameSpan) nameSpan.classList.add('active-folder');
+    li.scrollIntoView({block:"center"});
+  }
+};
+
+
+    tiles.appendChild(div);
+  });
+
+  showSiteTiles();
+}
+
+async function renderSiteSubfolderTiles(siteId, siteName="") {
+  const tiles = document.getElementById("siteTiles");
+  if (!tiles) return;
+
+  // charge la liste des dossiers du site
+  const files = await fetchFolderContents(siteId);
+  const folders = (files || [])
+    .filter(f => f.mimeType === 'application/vnd.google-apps.folder')
+    .sort((a,b) => a.name.localeCompare(b.name, 'fr', { sensitivity:'base' }));
+
+  tiles.innerHTML = "";
+
+  // Si pas de sous-dossiers → on ne montre pas les tuiles (on laisse le flux classique)
+  if (!folders.length){
+    hideSiteTiles();           // ✅ et donc on revoit le tableau
+    return;
+  }
+
+  // petit titre au-dessus des tuiles (optionnel mais pratique)
+  const head = document.createElement("div");
+  head.style.gridColumn = "1 / -1";
+  head.style.fontWeight = "900";
+  head.style.color = "var(--accent-darker)";
+  head.style.margin = "4px 2px 10px";
+  head.textContent = siteName ? `📍 ${siteName} — Dossiers` : "📍 Dossiers";
+  tiles.appendChild(head);
+
+  folders.forEach(f => {
+    const div = document.createElement("div");
+    div.className = "site-tile";
+    div.innerHTML = `
+      <div class="icon">📁</div>
+      <div class="label">${f.name}</div>
+    `;
+
     div.onclick = async () => {
-      // ✅ cache les tuiles dès qu’on quitte la racine
+      // on quitte le mode tuiles
       hideSiteTiles();
 
-      // ✅ retrouve le LI correspondant dans la sidebar et simule un clic
-      const li = document.querySelector(`#folderTree > li[data-id="${f.id}"]`);
-      if (li) {
-        await toggleFolder(li);              // ouvre le site (affiche sous-dossiers)
-        // option: le sélectionner visuellement
-        document.querySelectorAll('#folderTree li span.folder-name').forEach(s => s.classList.remove('active-folder'));
-        const nameSpan = li.querySelector('span.folder-name');
-        if (nameSpan) nameSpan.classList.add('active-folder');
-        li.scrollIntoView({block:"center"});
+      // on essaye de retrouver le LI déjà créé par toggleFolder
+      const childLi = document.querySelector(`#folderTree li[data-id="${f.id}"]`);
+      if (childLi) {
+        await loadFolderFilesOnClick(childLi, null);
+        childLi.scrollIntoView({block:"center"});
+      } else {
+        // fallback (rare) : si le li n'existe pas, on force l'affichage du contenu
+        localStorage.setItem('lastFolderId', f.id);
+        localStorage.setItem("lastFolderPath", (siteName ? siteName + "/" : "") + f.name);
+        const files2 = await fetchFolderContents(f.id);
+        const filtered = files2.filter(x =>
+          /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(x.name)
+        );
+        previewFiles = filtered.filter(x => /\.(jpg|jpeg|pdf|mp4|gif|webm|mov|m4v)$/i.test(x.name));
+        displayFiles(filtered, f.name);
       }
     };
 
@@ -3152,6 +3233,13 @@ function renderRootTiles(folders){
   showSiteTiles();
 }
 
+
+// Clique sur un site (tile ou sidebar) → ouvre l'arbre + affiche les sous-dossiers en tuiles
+async function openSiteAndShowTiles(siteId, siteName="") {
+  const li = document.querySelector(`#folderTree > li[data-id="${siteId}"]`);
+  if (li) await toggleFolder(li);     // ✅ charge/affiche les sous-dossiers dans la sidebar
+  await renderSiteSubfolderTiles(siteId, siteName);
+}
 
   
 
@@ -3165,6 +3253,8 @@ window.onload=()=>{
   document.getElementById("downloadFolderBtn").style.display="none";
 
 loadRootFolders();
+  hideTable();
+
 initDatePickers();
 initYearSelect();
 const last = localStorage.getItem("lastFolderId");
@@ -3220,6 +3310,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
