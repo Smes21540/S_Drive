@@ -847,7 +847,10 @@ const campFiles = files.filter(f =>
   await Promise.all(campFiles.map(async (f) => {
     const mYear = f.name.match(/(\d{4})\.(json|csv)$/i);
 if(!mYear) return;
-const key = mYear[1]; // ex: "2025"
+const key = f.name
+  .replace(/\.(json|csv)$/i, "")
+  .trim(); // ex: "🌻2025" ou "🌽2025"
+
 
     try{
       const res = await fetch(
@@ -3090,6 +3093,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
