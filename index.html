@@ -3216,7 +3216,7 @@ async function renderSiteSubfolderTiles(siteId, siteName="") {
   head.style.fontWeight = "900";
   head.style.color = "var(--accent-darker)";
   head.style.margin = "4px 2px 10px";
-  head.textContent = siteName ? `📍 ${siteName} — Dossiers` : "📍 Dossiers";
+  head.textContent = siteName ? `${siteName} — Dossiers : Choisissez le sous dossier` : "📍 Dossiers";
   tiles.appendChild(head);
 
   folders.forEach(f => {
@@ -3341,6 +3341,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
