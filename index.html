@@ -831,10 +831,11 @@ async function loadCampaignFilesForSite(siteId){
 
   const files = await fetchFolderContents(siteId);
 
-  // accepte 2024.json / 2025.json / 2024.csv / 2025.csv
-const campFiles = files.filter(f =>
-  /(\d{4})\.(json|csv)$/i.test(f.name)
-);
+  // accepte tout fichier qui CONTIENT une année et finit par .json/.csv
+  // ex: "2024.json", "🌽2025.json", "2024 Roulin 1🌻.json"
+  const campFiles = files.filter(f =>
+    /\d{4}.*\.(json|csv)$/i.test(f.name)
+  );
 
 
   if (!campFiles.length){
@@ -845,11 +846,11 @@ const campFiles = files.filter(f =>
   const out = {}; // { "2025": {start, end} }
 
   await Promise.all(campFiles.map(async (f) => {
-    const mYear = f.name.match(/(\d{4})\.(json|csv)$/i);
-if(!mYear) return;
-const key = f.name
-  .replace(/\.(json|csv)$/i, "")
-  .trim(); // ex: "🌻2025" ou "🌽2025"
+    const key = (f.name || "").replace(/\.(json|csv)$/i, "").trim();
+
+    // année = sert au tri (on prend la 1ère année trouvée dans le nom)
+    const mYear = (f.name || "").match(/(\d{4})/);
+    const year = mYear ? mYear[1] : "0000";
 
 
     try{
@@ -885,7 +886,13 @@ function renderCampaignButtons(campaigns){
   if(!box || !wrap) return;
 
   wrap.innerHTML = "";
-  const keys = Object.keys(campaigns || {}).sort((a,b)=> b.localeCompare(a)); // 2025 puis 2024
+    const keys = Object.keys(campaigns || {}).sort((a,b)=>{
+    const ya = campaigns[a]?.year || "0000";
+    const yb = campaigns[b]?.year || "0000";
+    if (ya !== yb) return yb.localeCompare(ya); // année desc
+    return a.localeCompare(b, 'fr', { sensitivity:'base' }); // puis nom
+  });
+
 
   if(!keys.length){
     box.style.display = "none";
@@ -3041,6 +3048,18 @@ async function runWithConcurrency(tasks, limit, worker) {
   await Promise.all([...executing]);
 }
 
+
+
+// ✅ évite le crash si #yearSelect n'existe plus
+function initYearSelect(){
+  const ys = document.getElementById("yearSelect");
+  if(!ys) return;
+  // Si tu réintroduis un select un jour, tu mettras ici son initialisation.
+}
+
+const ys = document.getElementById("yearSelect");
+if (ys) ys.value = "";
+
   
 
 /* ----------- Init ----------- */
@@ -3108,6 +3127,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
