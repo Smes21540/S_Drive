@@ -1289,13 +1289,15 @@ rootFolders.forEach(f => {
   else span.textContent = f.name;
 
 span.onclick = async (e) => {
-  // ✅ clic site (racine) → tuiles des sous-dossiers si il y en a
   e?.stopPropagation?.();
-  await openSiteAndShowTiles(li.dataset.id, (span.textContent || "").trim());
 
-  // si tu veux que le clic sur le site n'ouvre PAS de fichiers (normal, c'est un site)
-  // on ne fait pas loadFolderFilesOnClick ici.
+  // ✅ s'assure que la zone contrôles est visible dès clic sur le site
+  const controls = document.querySelector(".controls");
+  if (controls) controls.style.display = "flex";
+
+  await openSiteAndShowTiles(li.dataset.id, (span.textContent || "").trim());
 };
+
 
 
   li.appendChild(toggle);
@@ -3256,10 +3258,19 @@ async function renderSiteSubfolderTiles(siteId, siteName="") {
 
 // Clique sur un site (tile ou sidebar) → ouvre l'arbre + affiche les sous-dossiers en tuiles
 async function openSiteAndShowTiles(siteId, siteName="") {
+  // ✅ on affiche les contrôles pour que la box "Campagnes" puisse apparaître
+  const controls = document.querySelector(".controls");
+  if (controls) controls.style.display = "flex";
+
+  // ✅ charge les campagnes du site TOUT DE SUITE (avant même un dossier final)
+  await refreshCampaignUIForSite(siteId);
+
   const li = document.querySelector(`#folderTree > li[data-id="${siteId}"]`);
   if (li) await toggleFolder(li);     // ✅ charge/affiche les sous-dossiers dans la sidebar
+
   await renderSiteSubfolderTiles(siteId, siteName);
 }
+
 
   
 
@@ -3330,6 +3341,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
