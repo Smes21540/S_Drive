@@ -829,9 +829,10 @@ async function loadCampaignFilesForSite(siteId){
   const files = await fetchFolderContents(siteId);
 
   // accepte 2024.json / 2025.json / 2024.csv / 2025.csv
-  const campFiles = files.filter(f =>
-    /^\d{4}\.(json|csv)$/i.test(f.name)
-  );
+const campFiles = files.filter(f =>
+  /(\d{4})\.(json|csv)$/i.test(f.name)
+);
+
 
   if (!campFiles.length){
     campaignBySite[siteId] = {};
@@ -841,7 +842,10 @@ async function loadCampaignFilesForSite(siteId){
   const out = {}; // { "2025": {start, end} }
 
   await Promise.all(campFiles.map(async (f) => {
-    const key = f.name.slice(0,4); // "2024"
+    const mYear = f.name.match(/(\d{4})\.(json|csv)$/i);
+if(!mYear) return;
+const key = mYear[1]; // ex: "2025"
+
     try{
       const res = await fetch(
         `https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`
@@ -889,7 +893,14 @@ function renderCampaignButtons(campaigns){
     const c = campaigns[key];
     const btn = document.createElement("button");
     btn.className = "campaign-btn" + (activeCampaignKey === key ? " active" : "");
-    btn.textContent = `📌 Campagne ${key} (${c.start.split("-").reverse().join("/")} → ${c.end.split("-").reverse().join("/")})`;
+    // Nom brut depuis le fichier (sans extension)
+let label = (c.fileName || key)
+  .replace(/\.(json|csv)$/i, "")
+  .trim();
+
+btn.textContent =
+  `📌 Campagne ${label} (${c.start.split("-").reverse().join("/")} → ${c.end.split("-").reverse().join("/")})`;
+
 
     btn.onclick = async () => {
       const isSame = (activeCampaignKey === key);
@@ -3076,6 +3087,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
