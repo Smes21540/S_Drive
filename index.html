@@ -647,76 +647,6 @@ body[data-theme="orange"] #smes-footer-bg {
 }
 
 
-/* === Grille dossiers (tuiles) === */
-#folderGrid{
-  display:none;
-  padding: 10px 0;
-  overflow:auto;
-  border-radius: 12px;
-}
-
-.folder-grid{
-  display:grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 14px;
-}
-
-.folder-tile{
-  background: var(--panel);
-  border: 2px solid var(--table-border);
-  border-radius: 14px;
-  box-shadow: 0 4px 12px var(--shadow);
-  padding: 14px;
-  cursor: pointer;
-  transition: transform .12s ease, border-color .12s ease, box-shadow .12s ease;
-  display:flex;
-  gap: 12px;
-  align-items:center;
-}
-
-.folder-tile:hover{
-  transform: scale(1.02);
-  border-color: var(--accent);
-  box-shadow: 0 8px 18px var(--shadow);
-}
-
-.folder-tile .ico{
-  font-size: 34px;
-  width: 44px;
-  text-align:center;
-}
-
-.folder-tile .meta{
-  display:flex;
-  flex-direction:column;
-  gap: 2px;
-  min-width:0;
-}
-
-.folder-tile .name{
-  font-weight: 800;
-  color: var(--danger);
-  white-space: nowrap;
-  overflow:hidden;
-  text-overflow: ellipsis;
-}
-
-.folder-tile .desc{
-  font-size: 12px;
-  color: var(--muted-text);
-}
-
-.folder-tile .badge{
-  margin-top: 6px;
-  display:inline-flex;
-  align-self:flex-start;
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: var(--accent-muted);
-  color: var(--accent-darker);
-  font-weight: 700;
-  font-size: 12px;
-}
 
 
 
@@ -778,8 +708,6 @@ body[data-theme="orange"] #smes-footer-bg {
   <button id="exportExcelGazBtn" style="display:none;" title="Exporter les données en Excel (kWh, m³, durée, tonnage)">Export Excel</button>
 </div>
 
-<!-- Vue dossiers (tuiles) -->
-<div id="folderGrid" style="display:none;"></div>
 
 
   <div id="tableWrapper">
@@ -1187,76 +1115,6 @@ function getSiteRootLi(li){
 }
 
 
-function guessFolderIcon(name){
-  const n = (name || "").toLowerCase();
-  if (n.includes("gaz")) return "⛽";
-  if (n.includes("echantillonnage")) return "📖";
-  if (n.includes("capture")) return "🖼️";
-  if (n.includes("rapport")) return "📄";
-  if (n.includes("historique")) return "🗂️";
-  if (n.includes("traça_temp") || n.includes("traca_temp")) return "📈";
-  return "📁";
-}
-
-function showFolderGrid(folders, parentLabel=""){
-  const gridHost = document.getElementById("folderGrid");
-  const tableWrapper = document.getElementById("tableWrapper");
-  if(!gridHost || !tableWrapper) return;
-
-  gridHost.style.display = "block";
-  tableWrapper.style.display = "none";
-
-  const items = (folders || [])
-    .filter(f => f.mimeType === "application/vnd.google-apps.folder")
-    .sort((a,b)=>a.name.localeCompare(b.name,'fr',{sensitivity:'base'}));
-
-  gridHost.innerHTML = `
-    <div class="folder-grid">
-      ${items.map(f => `
-        <div class="folder-tile" data-id="${f.id}" title="Ouvrir ${f.name}">
-          <div class="ico">${guessFolderIcon(f.name)}</div>
-          <div class="meta">
-            <div class="name">${f.name}</div>
-            <div class="desc">${parentLabel ? "Dans : " + parentLabel : "Sous-dossier"}</div>
-            <div class="badge">Ouvrir</div>
-          </div>
-        </div>
-      `).join("")}
-    </div>
-  `;
-
-  gridHost.querySelectorAll(".folder-tile").forEach(tile => {
-    tile.onclick = async () => {
-      const id = tile.dataset.id;
-
-      // cas 1 : le LI existe déjà dans l'arborescence
-      const li = document.querySelector(`#folderTree li[data-id="${id}"]`);
-      if (li) {
-        await loadFolderFilesOnClick(li, null);
-        return;
-      }
-
-      // cas 2 : LI pas encore construit (arbo pas dépliée) -> LI "virtuel"
-      const fakeLi = document.createElement("li");
-      fakeLi.dataset.id = id;
-      const fakeSpan = document.createElement("span");
-      fakeSpan.className = "folder-name";
-      fakeSpan.textContent = tile.querySelector(".name")?.textContent || "Dossier";
-      fakeLi.appendChild(fakeSpan);
-
-      await loadFolderFilesOnClick(fakeLi, null);
-    };
-  });
-}
-
-function showTableView(){
-  const gridHost = document.getElementById("folderGrid");
-  const tableWrapper = document.getElementById("tableWrapper");
-  if(gridHost) gridHost.style.display = "none";
-  if(tableWrapper) tableWrapper.style.display = "block";
-}
-
-  
 
 function updateNetworkStatus(){
   document.getElementById("netAlert").style.display = navigator.onLine ? "none" : "block";
@@ -1574,30 +1432,84 @@ console.log("[Folder] Chemin complet enregistré :", fullPath);
     console.log("[Z3] Cache vidé (hors Traça_Temp / Historique)");
   }
 
-  // Charger contenus du dossier
+  // Charger fichiers CSV/JPG classiques du dossier
   const files = await fetchFolderContents(li.dataset.id);
+const filtered = files.filter(f =>
+  /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(f.name)
+);
 
-  // Sous-dossiers
-  const subFolders = files.filter(f => f.mimeType === "application/vnd.google-apps.folder");
 
-  // Fichiers “affichables” (csv, images, pdf, vidéos, ppt…)
-  const filtered = files.filter(f =>
-    /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(f.name)
-  );
 
-  // ✅ Si on est dans un dossier “intermédiaire” (sous-dossiers mais pas de fichiers) → tuiles
-  if (subFolders.length > 0 && filtered.length === 0) {
-    showFolderGrid(subFolders, nameSpan ? nameSpan.textContent : "");
-    document.querySelector(".controls").style.display = "none";
-    return;
+
+
+
+
+
+// 🧭 Détermination du site courant (toujours la racine du site)
+const siteRootLi = getSiteRootLi(li);
+const siteId = siteRootLi?.dataset.id || null;
+
+
+if (siteId && siteId !== currentSiteId) {
+  clearSiteHotDays();
+  currentSiteId = siteId;
+  console.log(`[SITE] Changement de site → ${siteRootLi?.querySelector(".folder-name")?.textContent}`);
+
+
+  // ✅ Campagnes (2024/2025...) depuis le dossier parent du site
+  await refreshCampaignUIForSite(siteId);
+  
+// 🔥 Lancer le scan en arrière-plan sans bloquer l'affichage
+scanSiteHotDays(siteId).then(map => {
+  hotDaysMap = map;
+  console.log(`[CACHE] 🔥 ${Object.keys(hotDaysMap).length} jours chauds détectés et chargés pour ${siteRootLi?.querySelector(".folder-name")?.textContent}`);
+
+
+// 🪄 Rafraîchir seulement les flammes dans le tableau actuel sans supprimer les notes 📝
+document.querySelectorAll('#csvTable tbody tr').forEach(tr => {
+  const nameCell = tr.cells[3];
+  const flameCell = tr.cells[1];
+  if (!nameCell || !flameCell) return;
+
+  const fname = nameCell.textContent.trim();
+  const m = fname.match(/(\d{8})\.csv$/i);
+
+  // 🔥 flamme DAY
+  if (m && hotDaysMap[m[1]] && !flameCell.innerHTML.includes("🔥")) {
+    flameCell.insertAdjacentHTML(
+      "afterbegin",
+      `<span class="flame" title="Brûleur actif ce jour-là">🔥</span>`
+    );
   }
 
-  // ✅ Sinon → tableau normal
-  showTableView();
+  // 📝 notes depuis JSON
+  if (m && storedNotes[m[1]] && !flameCell.innerHTML.includes("📝")) {
+    flameCell.insertAdjacentHTML(
+      "beforeend",
+      ` <span class="note" title="${storedNotes[m[1]].join("\n")}">📝</span>`
+      );
+    }
+  });
+});
 
-  previewFiles = filtered.filter(f => /\.(jpg|jpeg|pdf|mp4|gif|webm|mov|m4v)$/i.test(f.name));
-  displayFiles(filtered, nameSpan ? nameSpan.textContent : '');
+} else if (siteId && Object.keys(hotDaysMap).length === 0) {
+  hotDaysMap = loadSiteHotDays(siteId);
+  if (Object.keys(hotDaysMap).length === 0) {
+    console.log(`[CACHE] Aucun cache trouvé pour ${siteLi.querySelector(".folder-name")?.textContent}, relance du scan...`);
+    scanSiteHotDays(siteId).then(map => {
+      hotDaysMap = map;
+      console.log(`[CACHE] 🔥 ${Object.keys(hotDaysMap).length} jours chauds détectés et chargés pour ${siteLi.querySelector(".folder-name")?.textContent}`);
+      const active = document.querySelector('#folderTree .active-folder');
+      if (active) active.click();
+    });
+  } else {
+    console.log(`[CACHE] ${Object.keys(hotDaysMap).length} jours chauds chargés depuis cache`);
+  }
+}
 
+previewFiles = filtered.filter(f => /\.(jpg|jpeg|pdf|mp4|gif|webm|mov|m4v)$/i.test(f.name));
+
+displayFiles(filtered, nameSpan ? nameSpan.textContent : '');
 
 
 
@@ -3215,8 +3127,6 @@ function clearBrowserCache() {
 
 </body>
 </html>
-
-
 
 
 
