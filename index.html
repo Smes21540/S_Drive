@@ -1317,7 +1317,8 @@ rootFolders.forEach(f => {
   const toggle = document.createElement('span');
   toggle.className = 'folder-toggle';
   toggle.textContent = '';
-  toggle.onclick = () => toggleFolder(li);
+  toggle.onclick = (e) => toggleFolder(li, e);
+
 
   const span = document.createElement('span');
   span.className = 'folder-name';
@@ -1365,73 +1366,72 @@ span.onclick = async (e) => {
   }, 1000);
 }
 
-async function toggleFolder(li){
-  const toggle=li.querySelector('.folder-toggle');
-if(li.dataset.loaded==='true'){
-  const ul = li.querySelector('ul');
-  // ✅ Ne replie pas le parent si on clique un sous-dossier
-  if (!ul) return;
-  if (event && event.target && !event.target.classList.contains('folder-name')) return;
-  ul.style.display = ul.style.display === 'none' ? 'block' : 'none';
-  return;
-}
+async function toggleFolder(li, event){
 
-  toggle.textContent='…';
-  const files=await fetchFolderContents(li.dataset.id);
-  const ul=document.createElement('ul');
-  const folders = files
-  .filter(f => f.mimeType === 'application/vnd.google-apps.folder')
-  .sort((a,b) => a.name.localeCompare(b.name, 'fr', { sensitivity:'base' }));
+  // 🛡️ Anti double-clic / anti double chargement concurrent
+  if (li.dataset.loading === "true") return;
+  li.dataset.loading = "true";
 
-for (const f of folders) {
+  try {
+    const toggle = li.querySelector('.folder-toggle');
 
-    const childLi=document.createElement('li'); 
-    childLi.dataset.id=f.id;
+    if (li.dataset.loaded === 'true') {
+      const ul = li.querySelector('ul');
+      if (!ul) return;
 
-    const childToggle=document.createElement('span'); 
-    childToggle.className='folder-toggle'; 
-    childToggle.textContent='';
-    childToggle.onclick=()=>toggleFolder(childLi);
+      // ✅ Ne replie pas le parent si on clique un sous-dossier
+      if (event && event.target && !event.target.classList.contains('folder-name')) return;
 
-const span = document.createElement('span');
-span.className = 'folder-name';
-
-const icon = getFolderIcon(f.name);
-span.innerHTML = `${icon} ${f.name}`;
-
-
-applyFolderTooltip(span, f.name);
-
-
-span.onclick = (e) => loadFolderFilesOnClick(childLi, e);
-
-
-
-    childLi.appendChild(childToggle); 
-    childLi.appendChild(span); 
-    ul.appendChild(childLi);
-
-    // ✅ Cas spécial : si le dossier est Traça_Temp → précharger Historique
-    if (f.name.toLowerCase().includes("traça_temp") || f.name.toLowerCase().includes("traca_temp")) {
-      const siblings = await fetchFolderContents(li.dataset.id);
-      const hist = siblings.find(s => s.mimeType === 'application/vnd.google-apps.folder' && s.name.toLowerCase().includes("historique"));
-      if (hist) {
-        const histFiles = await fetchFolderContents(hist.id);
-        const z3Files = histFiles.filter(ff => ff.name.toUpperCase().startsWith("Z3") && ff.name.toLowerCase().endsWith(".csv"));
-localStorage.setItem("csvZ3Files", JSON.stringify(z3Files));
-console.log("[Z3] Préchargés depuis Historique:", z3Files.length);
-showEventAlert();
-
-      }
+      ul.style.display = ul.style.display === 'none' ? 'block' : 'none';
+      return;
     }
 
-    // ✅ Vérif Temp (flamme 🔥)
-    if(f.name.includes("Temp")){ checkTraçaTempToday(li, f.id); }
+    toggle.textContent = '…';
+
+    const files = await fetchFolderContents(li.dataset.id);
+    const ul = document.createElement('ul');
+
+    const folders = files
+      .filter(f => f.mimeType === 'application/vnd.google-apps.folder')
+      .sort((a,b) => a.name.localeCompare(b.name, 'fr', { sensitivity:'base' }));
+
+    for (const f of folders) {
+      const childLi = document.createElement('li');
+      childLi.dataset.id = f.id;
+
+      const childToggle = document.createElement('span');
+      childToggle.className = 'folder-toggle';
+      childToggle.textContent = '';
+
+      // ✅ IMPORTANT: passer l’event
+      childToggle.onclick = (e) => toggleFolder(childLi, e);
+
+      const span = document.createElement('span');
+      span.className = 'folder-name';
+
+      const icon = getFolderIcon(f.name);
+      span.innerHTML = `${icon} ${f.name}`;
+      applyFolderTooltip(span, f.name);
+
+      span.onclick = (e) => loadFolderFilesOnClick(childLi, e);
+
+      childLi.appendChild(childToggle);
+      childLi.appendChild(span);
+      ul.appendChild(childLi);
+
+      // ✅ Vérif Temp (flamme 🔥)
+      if (f.name.includes("Temp")) { checkTraçaTempToday(li, f.id); }
+    }
+
+    li.appendChild(ul);
+    li.dataset.loaded = 'true';
+    toggle.textContent = '';
+
+  } finally {
+    li.dataset.loading = "false";
   }
-  li.appendChild(ul); 
-  li.dataset.loaded='true'; 
-  toggle.textContent='';
 }
+
 
 
 // Fonction utilitaire pour récupérer les sous-dossiers sans modifier l'affichage
@@ -3397,6 +3397,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
