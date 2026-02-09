@@ -1465,6 +1465,11 @@ if (li.dataset.loaded === 'true') {
     toggle.textContent = '…';
 
     const files = await fetchFolderContents(li.dataset.id);
+
+
+
+
+    
     const ul = document.createElement('ul');
 
 const folders = files
@@ -1639,6 +1644,22 @@ console.log("[Folder] Chemin complet enregistré :", fullPath);
 
   // Charger fichiers CSV/JPG classiques du dossier
   const files = await fetchFolderContents(li.dataset.id);
+
+const subFolders = (files || []).filter(isDriveFolderOrShortcutFolder);
+const visibleFiles = (files || []).filter(f =>
+  /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(f.name)
+);
+
+// ✅ si pas de fichiers mais des sous-dossiers -> mode tuiles sur ce dossier
+if (visibleFiles.length === 0 && subFolders.length > 0) {
+  // prépare les tuiles pour ce niveau
+  const folderName = li.querySelector(".folder-name")?.textContent?.trim() || "";
+  await renderSiteSubfolderTiles(li.dataset.id, folderName);
+  return;
+}
+
+
+  
 const filtered = files.filter(f =>
   /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(f.name)
 );
@@ -3561,6 +3582,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
