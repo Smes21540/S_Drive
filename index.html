@@ -3254,11 +3254,10 @@ div.innerHTML = `
 
 
 div.onclick = async () => {
-  // ✅ choisir un site → afficher ses dossiers en tuiles
-  await openSiteAndShowTiles(f.id, f.name);
+  const realId = getDriveFolderId(f); // ✅ ID réel (dossier cible si shortcut)
+  await openSiteAndShowTiles(realId, f.name);
 
-  // option: surlignage du site dans la sidebar
-  const li = document.querySelector(`#folderTree > li[data-id="${f.id}"]`);
+  const li = document.querySelector(`#folderTree > li[data-id="${realId}"]`);
   if (li) {
     document.querySelectorAll('#folderTree li span.folder-name')
       .forEach(s => s.classList.remove('active-folder'));
@@ -3267,6 +3266,7 @@ div.onclick = async () => {
     li.scrollIntoView({block:"center"});
   }
 };
+
 
 
     tiles.appendChild(div);
@@ -3340,21 +3340,25 @@ applyFolderTooltip(div, f.name);
       hideSiteTiles();
 
       // on essaye de retrouver le LI déjà créé par toggleFolder
-      const childLi = document.querySelector(`#folderTree li[data-id="${f.id}"]`);
-      if (childLi) {
-        await loadFolderFilesOnClick(childLi, null);
-        childLi.scrollIntoView({block:"center"});
-      } else {
-        // fallback (rare) : si le li n'existe pas, on force l'affichage du contenu
-        localStorage.setItem('lastFolderId', f.id);
-        localStorage.setItem("lastFolderPath", (siteName ? siteName + "/" : "") + f.name);
-        const files2 = await fetchFolderContents(f.id);
-        const filtered = files2.filter(x =>
-          /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(x.name)
-        );
-        previewFiles = filtered.filter(x => /\.(jpg|jpeg|pdf|mp4|gif|webm|mov|m4v)$/i.test(x.name));
-        displayFiles(filtered, f.name);
-      }
+const realId = getDriveFolderId(f);
+
+const childLi = document.querySelector(`#folderTree li[data-id="${realId}"]`);
+if (childLi) {
+  await loadFolderFilesOnClick(childLi, null);
+  childLi.scrollIntoView({block:"center"});
+} else {
+  // fallback
+  localStorage.setItem('lastFolderId', realId);
+  localStorage.setItem("lastFolderPath", (siteName ? siteName + "/" : "") + f.name);
+
+  const files2 = await fetchFolderContents(realId);
+  const filtered = files2.filter(x =>
+    /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(x.name)
+  );
+  previewFiles = filtered.filter(x => /\.(jpg|jpeg|pdf|mp4|gif|webm|mov|m4v)$/i.test(x.name));
+  displayFiles(filtered, f.name);
+}
+
     };
 
     tiles.appendChild(div);
@@ -3449,6 +3453,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
