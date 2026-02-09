@@ -864,6 +864,36 @@ let storedNotes = {};
 
 
 /* ----------- Config personnalisée ----------- */
+
+/* --- Descriptions dossiers (tooltip simple) --- */
+const FOLDER_DESCRIPTIONS = [
+  { key: "traça_temp", desc: "Traçabilité valeurs sondes, consignes, réglages, consommation… Courbes, plan de sondes, etc." },
+  { key: "traca_temp", desc: "Traçabilité valeurs sondes, consignes, réglages, consommation… Courbes, plan de sondes, etc." },
+  { key: "historique", desc: "Historique de fonctionnement, réglages, événements journaliers…" },
+  { key: "echantillonnage", desc: "Feuille de prises d'échantillon journalière (Humidité, réglages, etc.)." },
+  { key: "consommation gaz", desc: "Consommation gaz journalière, conversion kWh, temps de séchage, cumul tonnage…" },
+];
+
+function getFolderDescription(name){
+  const n = (name || "").toLowerCase();
+  const hit = FOLDER_DESCRIPTIONS.find(x => n.includes(x.key));
+  return hit ? hit.desc : "";
+}
+
+function applyFolderTooltip(el, folderName){
+  if (!el) return;
+
+  const desc = getFolderDescription(folderName);
+  if (desc){
+    el.title = desc; // tooltip natif
+  }
+}
+
+
+
+
+
+  
 const FLAME_THRESHOLD = 40.0;   // seuil déclencheur de la flamme 🔥
 
 /* ----------- État ----------- */
@@ -1287,6 +1317,12 @@ rootFolders.forEach(f => {
   else if (lowerName.includes("historique")) span.innerHTML = `🗂️ ${f.name}`;
   else if (lowerName.includes("traça_temp") || lowerName.includes("traca_temp")) span.innerHTML = `📈 ${f.name}`;
   else span.textContent = f.name;
+applyFolderTooltip(span, f.name);
+
+
+
+
+  
 
 span.onclick = async (e) => {
   e?.stopPropagation?.();
@@ -1370,6 +1406,7 @@ if (lowerName.includes("gaz")) {
   span.textContent = f.name;
 }
 
+applyFolderTooltip(span, f.name);
 
 
 span.onclick = (e) => loadFolderFilesOnClick(childLi, e);
@@ -3227,6 +3264,10 @@ async function renderSiteSubfolderTiles(siteId, siteName="") {
       <div class="label">${f.name}</div>
     `;
 
+applyFolderTooltip(div, f.name);
+
+
+    
     div.onclick = async () => {
       // on quitte le mode tuiles
       hideSiteTiles();
@@ -3341,6 +3382,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
