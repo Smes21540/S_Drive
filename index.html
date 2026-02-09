@@ -1441,16 +1441,21 @@ async function toggleFolder(li, event){
   try {
     const toggle = li.querySelector('.folder-toggle');
 
-    if (li.dataset.loaded === 'true') {
-      const ul = li.querySelector('ul');
-      if (!ul) return;
+if (li.dataset.loaded === 'true') {
+  const ul = li.querySelector('ul');
+  if (!ul) return;
 
-      // ✅ Ne replie pas le parent si on clique un sous-dossier
-      if (event && event.target && !event.target.classList.contains('folder-name')) return;
+  // ✅ APPEL PROGRAMMATIQUE → on ASSURE ouvert
+  if (!event) {
+    ul.style.display = 'block';
+    return;
+  }
 
-      ul.style.display = ul.style.display === 'none' ? 'block' : 'none';
-      return;
-    }
+  // ✅ CLIC UTILISATEUR SUR LA FLÈCHE → toggle
+  ul.style.display = (ul.style.display === 'none') ? 'block' : 'none';
+  return;
+}
+
 
     toggle.textContent = '…';
 
@@ -1486,7 +1491,10 @@ for (const f of folders) {
       ul.appendChild(childLi);
 
       // ✅ Vérif Temp (flamme 🔥)
-      if (f.name.includes("Temp")) { checkTraçaTempToday(li, f.id); }
+      if (f.name.includes("Temp")) {
+  checkTraçaTempToday(li, getDriveFolderId(f));
+}
+
     }
 
     li.appendChild(ul);
@@ -3522,6 +3530,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
