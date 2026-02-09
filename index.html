@@ -3214,10 +3214,13 @@ function renderRootTiles(folders){
   folders.forEach(f => {
     const div = document.createElement("div");
     div.className = "site-tile";
-    div.innerHTML = `
-      <div class="icon">📁</div>
-      <div class="label">${f.name}</div>
-    `;
+const icon = getFolderIcon(f.name);
+
+div.innerHTML = `
+  <div class="icon">${icon}</div>
+  <div class="label">${f.name}</div>
+`;
+
 
 div.onclick = async () => {
   // ✅ choisir un site → afficher ses dossiers en tuiles
@@ -3397,6 +3400,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
