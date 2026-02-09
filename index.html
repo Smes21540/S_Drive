@@ -943,6 +943,14 @@ function getDriveFolderId(f){
   return f?.id; // ✅ dossier normal
 }
 
+function getDriveFileId(f){
+  if (f?.mimeType === "application/vnd.google-apps.shortcut" && f?.shortcutDetails?.targetId) {
+    return f.shortcutDetails.targetId; // ✅ fichier cible
+  }
+  return f?.id; // ✅ fichier normal
+}
+
+  
 
 /* ===========================
    === Campagnes (2024/2025...)
@@ -988,9 +996,11 @@ async function loadCampaignFilesForSite(siteId){
 
 
     try{
-      const res = await fetch(
-        `https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`
-      );
+const realId = getDriveFileId(f);
+const res = await fetch(
+  `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`
+);
+
       if(!res.ok) return;
 
       const text = await res.text();
@@ -3453,6 +3463,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
