@@ -195,19 +195,49 @@ const download = ["1", "true", "yes"].includes(String(qp.download || "").toLower
       }
 
 if (list) {
-  // Liste paginée des fichiers d'un dossier (évite la "limite" 100/1000)
+
+  // ✅ 1) Résoudre si l’ID demandé est un raccourci vers un dossier
+  let folderId = id;
+
+  try {
+    const metaUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?` +
+      new URLSearchParams({
+        supportsAllDrives: "true",
+        fields: "id,mimeType,shortcutDetails(targetId,targetMimeType)"
+      }).toString();
+
+    const metaRes = await fetchWithRetry(metaUrl, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    // Si le GET meta échoue, on ne bloque pas : on tentera la liste avec id tel quel
+    if (metaRes.ok) {
+      const meta = await metaRes.json().catch(() => ({}));
+      const isShortcutFolder =
+        meta?.mimeType === "application/vnd.google-apps.shortcut" &&
+        meta?.shortcutDetails?.targetMimeType === "application/vnd.google-apps.folder" &&
+        meta?.shortcutDetails?.targetId;
+
+      if (isShortcutFolder) {
+        folderId = meta.shortcutDetails.targetId;
+      }
+    }
+
+  } catch (e) {
+    console.warn("Shortcut resolve failed:", e);
+  }
+
+  // ✅ 2) Liste paginée des fichiers d'un dossier (ID résolu si raccourci)
   let allFiles = [];
   let pageToken = undefined;
 
   do {
     const params = new URLSearchParams();
-    // ⚠️ ne pas encodeURIComponent(id) à l'intérieur de q
-    params.set("q", `'${id}' in parents and trashed=false`);
-params.set(
-  "fields",
-  "nextPageToken, files(id,name,mimeType,size,createdTime,modifiedTime,shortcutDetails(targetId,targetMimeType))"
-);
-
+    params.set("q", `'${folderId}' in parents and trashed=false`);
+    params.set(
+      "fields",
+      "nextPageToken, files(id,name,mimeType,size,createdTime,modifiedTime,shortcutDetails(targetId,targetMimeType))"
+    );
 
     params.set("pageSize", "1000");
     params.set("supportsAllDrives", "true");
@@ -239,9 +269,16 @@ params.set(
       "Cache-Control": "public, max-age=30, must-revalidate",
       "Netlify-CDN-Cache-Control": "public, max-age=30, must-revalidate",
     },
-    body: JSON.stringify({ files: allFiles })
+    body: JSON.stringify({
+      files: allFiles,
+
+      // (optionnel) pratique debug côté front
+      resolvedFolderId: folderId,
+      requestedId: id
+    })
   }, allowOrigin);
 }
+
 
 
       // Téléchargement d'un fichier
