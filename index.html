@@ -1404,18 +1404,27 @@ span.onclick = async (e) => {
 
   // 🔥 Vérifier automatiquement deux crans plus bas sans ouvrir visuellement
   setTimeout(async () => {
-    const siteFolders = document.querySelectorAll("#folderTree > li");
+    const siteFolders = Array.from(document.querySelectorAll("#folderTree > li"));
 
-    for (const siteLi of siteFolders) {
-const subFolders = await fetchChildren(siteLi.dataset.id);
-for (const sub of subFolders) {
-  if ((sub.name || "").includes("Temp")) {
-    await checkTraçaTempToday(siteLi, getDriveFolderId(sub)); // ✅ ID réel
-  }
-}
+    const limit = 3;
+    let idx = 0;
 
+    async function worker(){
+      while(idx < siteFolders.length){
+        const siteLi = siteFolders[idx++];
+        const subFolders = await fetchChildren(siteLi.dataset.id);
+
+        for (const sub of subFolders) {
+          if ((sub.name || "").includes("Temp")) {
+            await checkTraçaTempToday(siteLi, getDriveFolderId(sub));
+          }
+        }
+      }
     }
+
+    await Promise.all(Array.from({ length: limit }, worker));
   }, 1000);
+
 }
 
 
@@ -3594,6 +3603,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
