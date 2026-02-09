@@ -1481,7 +1481,35 @@ async function fetchChildren(folderId){
 
 }
 
+
+
+
+  
 async function loadFolderFilesOnClick(li, event){
+
+  // ✅ 1) Si li est absent (appel auto / refresh / filtre), on tente de le retrouver
+  if (!li) {
+    const lastId = localStorage.getItem("lastFolderId");
+    if (lastId) {
+      li = document.querySelector(`#folderTree li[data-id="${lastId}"]`);
+    }
+  }
+
+  // ✅ 2) Si toujours rien, on sort proprement (plus de ReferenceError)
+  if (!li) {
+    console.warn("[loadFolderFilesOnClick] appelé sans li valide");
+    return;
+  }
+
+  // ✅ 3) Sécurité bonus : si li n’a pas dataset.id, on tente de le reconstruire
+  if (!li.dataset || !li.dataset.id) {
+    const lastId = localStorage.getItem("lastFolderId");
+    if (lastId) {
+      const fallback = document.querySelector(`#folderTree li[data-id="${lastId}"]`);
+      if (fallback) li = fallback;
+    }
+  }
+
   // reset des notes
   storedNotes = {};
   if (typeof jsonDates !== "undefined") jsonDates.clear?.();
@@ -1489,22 +1517,26 @@ async function loadFolderFilesOnClick(li, event){
 
   await toggleFolder(li);
 
-// 🔄 Réinitialiser la sélection visuelle
-document.querySelectorAll('#folderTree li span.folder-name').forEach(s => s.classList.remove('active-folder'));
+  // 🔄 Réinitialiser la sélection visuelle
+  document.querySelectorAll('#folderTree li span.folder-name')
+    .forEach(s => s.classList.remove('active-folder'));
 
-// ✅ Surligne le dossier cliqué
-const nameSpan = li.querySelector('span.folder-name');
-if (nameSpan) nameSpan.classList.add('active-folder');
+  // ✅ Surligne le dossier cliqué
+  const nameSpan = li.querySelector('span.folder-name');
+  if (nameSpan) nameSpan.classList.add('active-folder');
 
-// ✅ Surligne aussi tous les parents (chemin hiérarchique)
-let parentLi = li.parentElement.closest('li');
-while (parentLi) {
-  const parentSpan = parentLi.querySelector('span.folder-name');
-  if (parentSpan) parentSpan.classList.add('active-folder');
-  parentLi = parentLi.parentElement.closest('li');
-}
+  // ✅ Surligne aussi tous les parents (chemin hiérarchique)
+  let parentLi = li.parentElement.closest('li');
+  while (parentLi) {
+    const parentSpan = parentLi.querySelector('span.folder-name');
+    if (parentSpan) parentSpan.classList.add('active-folder');
+    parentLi = parentLi.parentElement.closest('li');
+  }
 
-  localStorage.setItem('lastFolderId', li.dataset.id);
+  // ✅ Ne set le lastFolderId que si on peut
+  if (li.dataset?.id) {
+    localStorage.setItem('lastFolderId', li.dataset.id);
+  }
 
 // 📂 Sauvegarde du chemin complet (ex: Voreppe/Traça_Temp)
 function buildFullFolderPath(li) {
@@ -1633,13 +1665,15 @@ document.querySelectorAll('#csvTable tbody tr').forEach(tr => {
 } else if (siteId && Object.keys(hotDaysMap).length === 0) {
   hotDaysMap = loadSiteHotDays(siteId);
   if (Object.keys(hotDaysMap).length === 0) {
-    console.log(`[CACHE] Aucun cache trouvé pour ${siteLi.querySelector(".folder-name")?.textContent}, relance du scan...`);
-    scanSiteHotDays(siteId).then(map => {
-      hotDaysMap = map;
-      console.log(`[CACHE] 🔥 ${Object.keys(hotDaysMap).length} jours chauds détectés et chargés pour ${siteLi.querySelector(".folder-name")?.textContent}`);
-      const active = document.querySelector('#folderTree .active-folder');
-      if (active) active.click();
-    });
+    console.log(`[CACHE] Aucun cache trouvé pour ${li?.querySelector(".folder-name")?.textContent}, relance du scan...`);
+
+scanSiteHotDays(siteId).then(map => {
+  hotDaysMap = map;
+  console.log(`[CACHE] 🔥 ${Object.keys(hotDaysMap).length} jours chauds détectés et chargés pour ${siteRootLi?.querySelector(".folder-name")?.textContent}`);
+  const active = document.querySelector('#folderTree .active-folder');
+  if (active) active.click();
+});
+
   } else {
     console.log(`[CACHE] ${Object.keys(hotDaysMap).length} jours chauds chargés depuis cache`);
   }
@@ -3463,6 +3497,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
