@@ -1544,6 +1544,10 @@ const siteId = siteRootLi?.dataset.id || null;
 
 
 if (siteId && siteId !== currentSiteId) {
+
+  // ✅ RESET filtres date dès changement de site
+  resetDateFilterUIAndState();
+  
   clearSiteHotDays();
   currentSiteId = siteId;
   console.log(`[SITE] Changement de site → ${siteRootLi?.querySelector(".folder-name")?.textContent}`);
@@ -2201,6 +2205,20 @@ async function clearFilter(){
   await refreshCurrentFolder();
 }
 
+function resetDateFilterUIAndState(){
+  filterStartDate = "";
+  filterEndDate = "";
+
+  fpStart?.clear();
+  fpEnd?.clear();
+
+  // retire l'affichage des champs masqués/visibles
+  document.querySelectorAll(".date-field").forEach(df => df.classList.remove("has-date"));
+
+  // reset campagne visuelle
+  activeCampaignKey = "";
+  document.querySelectorAll(".campaign-btn").forEach(b => b.classList.remove("active"));
+}
 
 
 
@@ -3379,6 +3397,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
