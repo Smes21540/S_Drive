@@ -890,6 +890,19 @@ function applyFolderTooltip(el, folderName){
 }
 
 
+/* --- Icônes dossiers selon type --- */
+function getFolderIcon(name){
+  const n = (name || "").toLowerCase();
+
+  if (n.includes("gaz")) return "⛽";
+  if (n.includes("echantillonnage")) return "📖";
+  if (n.includes("capture")) return "🖼️";
+  if (n.includes("rapport")) return "📄";
+  if (n.includes("historique")) return "🗂️";
+  if (n.includes("traça_temp") || n.includes("traca_temp")) return "📈";
+
+  return "📁";
+}
 
 
 
@@ -1309,14 +1322,9 @@ rootFolders.forEach(f => {
   const span = document.createElement('span');
   span.className = 'folder-name';
 
-  const lowerName = f.name.toLowerCase();
-  if (lowerName.includes("gaz")) span.innerHTML = `⛽ ${f.name}`;
-  else if (lowerName.includes("echantillonnage")) span.innerHTML = `📖 ${f.name}`;
-  else if (lowerName.includes("capture")) span.innerHTML = `🖼️ ${f.name}`;
-  else if (lowerName.includes("rapport")) span.innerHTML = `📄 ${f.name}`;
-  else if (lowerName.includes("historique")) span.innerHTML = `🗂️ ${f.name}`;
-  else if (lowerName.includes("traça_temp") || lowerName.includes("traca_temp")) span.innerHTML = `📈 ${f.name}`;
-  else span.textContent = f.name;
+const icon = getFolderIcon(f.name);
+span.innerHTML = `${icon} ${f.name}`;
+
 applyFolderTooltip(span, f.name);
 
 
@@ -1388,23 +1396,9 @@ for (const f of folders) {
 const span = document.createElement('span');
 span.className = 'folder-name';
 
-const lowerName = f.name.toLowerCase();
+const icon = getFolderIcon(f.name);
+span.innerHTML = `${icon} ${f.name}`;
 
-if (lowerName.includes("gaz")) {
-  span.innerHTML = `⛽ ${f.name}`;
-} else if (lowerName.includes("echantillonnage")) {
-  span.innerHTML = `📖 ${f.name}`;
-} else if (lowerName.includes("capture")) {
-  span.innerHTML = `🖼️ ${f.name}`;
-} else if (lowerName.includes("rapport")) {
-  span.innerHTML = `📄 ${f.name}`;
-} else if (lowerName.includes("historique")) {
-  span.innerHTML = `🗂️ ${f.name}`;
-} else if (lowerName.includes("traça_temp") || lowerName.includes("traca_temp")) {
-  span.innerHTML = `📈 ${f.name}`;
-} else {
-  span.textContent = f.name;
-}
 
 applyFolderTooltip(span, f.name);
 
@@ -3259,10 +3253,13 @@ async function renderSiteSubfolderTiles(siteId, siteName="") {
   folders.forEach(f => {
     const div = document.createElement("div");
     div.className = "site-tile";
-    div.innerHTML = `
-      <div class="icon">📁</div>
-      <div class="label">${f.name}</div>
-    `;
+const icon = getFolderIcon(f.name);
+
+div.innerHTML = `
+  <div class="icon">${icon}</div>
+  <div class="label">${f.name}</div>
+`;
+
 
 applyFolderTooltip(div, f.name);
 
@@ -3382,6 +3379,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
