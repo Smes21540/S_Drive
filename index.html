@@ -1407,12 +1407,13 @@ span.onclick = async (e) => {
     const siteFolders = document.querySelectorAll("#folderTree > li");
 
     for (const siteLi of siteFolders) {
-      const subFolders = await fetchChildren(siteLi.dataset.id);
-      for (const sub of subFolders) {
-        if (sub.name.includes("Temp")) {
-          await checkTraçaTempToday(siteLi, sub.id); 
-        }
-      }
+const subFolders = await fetchChildren(siteLi.dataset.id);
+for (const sub of subFolders) {
+  if ((sub.name || "").includes("Temp")) {
+    await checkTraçaTempToday(siteLi, getDriveFolderId(sub)); // ✅ ID réel
+  }
+}
+
     }
   }, 1000);
 }
@@ -1607,10 +1608,16 @@ console.log("[Folder] Chemin complet enregistré :", fullPath);
     const siteLi = li.parentElement.closest("li");
     if (siteLi && siteLi.dataset.id) {
       const siblings = await fetchFolderContents(siteLi.dataset.id);
-      const hist = siblings.find(s => 
-        s.mimeType === 'application/vnd.google-apps.folder' && 
-        s.name.toLowerCase().includes("historique")
-      );
+const hist = siblings.find(s => {
+  if (!isDriveFolderOrShortcutFolder(s)) return false;
+  return (s.name || "").toLowerCase().includes("historique");
+});
+
+if (hist) {
+  const histFiles = await fetchFolderContents(getDriveFolderId(hist));
+  ...
+}
+
 
       if (hist) {
         const histFiles = await fetchFolderContents(hist.id);
@@ -2711,18 +2718,23 @@ async function scanSiteHotDays(siteId) {
   console.log(`[SCAN] Scan du site ${siteId} → dossier Traça_Temp`);
 
   try {
-    const siblings = await fetchFolderContents(siteId);
-    const tracatemp = siblings.find(s => 
-      s.mimeType === 'application/vnd.google-apps.folder' &&
-      (s.name.toLowerCase().includes("traça_temp") || s.name.toLowerCase().includes("traca_temp"))
-    );
+const siblings = await fetchFolderContents(siteId);
+
+const tracatemp = siblings.find(s =>
+  isDriveFolderOrShortcutFolder(s) &&
+  (s.name || "").toLowerCase().includes("traça_temp") ||
+  isDriveFolderOrShortcutFolder(s) &&
+  (s.name || "").toLowerCase().includes("traca_temp")
+);
+
 if (!tracatemp) {
   console.warn(`[SCAN] Aucun dossier Traça_Temp trouvé pour le site ${siteId}`);
   return hotDays;
 }
 
+const tracatempId = getDriveFolderId(tracatemp);     // ✅ ID réel (targetId si shortcut)
+const files = await fetchFolderContents(tracatempId);
 
-    const files = await fetchFolderContents(tracatemp.id);
     const csvFiles = files.filter(f => f.name.toLowerCase().endsWith(".csv"));
     console.log(`[SCAN] ${csvFiles.length} CSV trouvés dans ${tracatemp.name}`);
 
@@ -3582,6 +3594,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
