@@ -928,6 +928,20 @@ let filterStartDate="", filterEndDate="";
 let themeMenuTimer;
 let cancelScan = false; // 🛑 permet d’arrêter le scan si on clique ailleurs
 
+function isDriveFolderOrShortcutFolder(f){
+  return (
+    f?.mimeType === "application/vnd.google-apps.folder" ||
+    (f?.mimeType === "application/vnd.google-apps.shortcut" &&
+     f?.shortcutDetails?.targetMimeType === "application/vnd.google-apps.folder")
+  );
+}
+
+function getDriveFolderId(f){
+  if (f?.mimeType === "application/vnd.google-apps.shortcut" && f?.shortcutDetails?.targetId) {
+    return f.shortcutDetails.targetId; // ✅ ID du dossier cible
+  }
+  return f?.id; // ✅ dossier normal
+}
 
 
 /* ===========================
@@ -1316,8 +1330,9 @@ activeCampaignKey = "";
 
 // ✅ Liste dossiers racine
 const rootFolders = files
-  .filter(f => f.mimeType === 'application/vnd.google-apps.folder')
+  .filter(isDriveFolderOrShortcutFolder)
   .sort((a,b) => a.name.localeCompare(b.name, 'fr', { sensitivity:'base' }));
+
 
 // ✅ Remplit les tuiles à droite (uniquement si non vide)
 renderRootTiles(rootFolders);
@@ -1325,7 +1340,9 @@ renderRootTiles(rootFolders);
 // ✅ Remplit la sidebar comme avant
 rootFolders.forEach(f => {
   const li = document.createElement('li');
-  li.dataset.id = f.id;
+  li.dataset.id = getDriveFolderId(f);
+
+
 
   const toggle = document.createElement('span');
   toggle.className = 'folder-toggle';
@@ -1404,13 +1421,13 @@ async function toggleFolder(li, event){
     const files = await fetchFolderContents(li.dataset.id);
     const ul = document.createElement('ul');
 
-    const folders = files
-      .filter(f => f.mimeType === 'application/vnd.google-apps.folder')
-      .sort((a,b) => a.name.localeCompare(b.name, 'fr', { sensitivity:'base' }));
+const folders = files
+  .filter(isDriveFolderOrShortcutFolder)
+  .sort((a,b) => a.name.localeCompare(b.name, 'fr', { sensitivity:'base' }));
 
-    for (const f of folders) {
-      const childLi = document.createElement('li');
-      childLi.dataset.id = f.id;
+for (const f of folders) {
+  const childLi = document.createElement('li');
+  childLi.dataset.id = getDriveFolderId(f);
 
       const childToggle = document.createElement('span');
       childToggle.className = 'folder-toggle';
@@ -1450,7 +1467,8 @@ async function toggleFolder(li, event){
 // Fonction utilitaire pour récupérer les sous-dossiers sans modifier l'affichage
 async function fetchChildren(folderId){
   const files = await fetchFolderContents(folderId);
-  return files.filter(f => f.mimeType === 'application/vnd.google-apps.folder');
+  return files.filter(isDriveFolderOrShortcutFolder);
+
 }
 
 async function loadFolderFilesOnClick(li, event){
@@ -3263,8 +3281,9 @@ async function renderSiteSubfolderTiles(siteId, siteName="") {
 
   // charge la liste des dossiers du site
   const files = await fetchFolderContents(siteId);
-  const folders = (files || [])
-    .filter(f => f.mimeType === 'application/vnd.google-apps.folder')
+const folders = (files || [])
+  .filter(isDriveFolderOrShortcutFolder)
+
     .sort((a,b) => a.name.localeCompare(b.name, 'fr', { sensitivity:'base' }));
 
   tiles.innerHTML = "";
@@ -3430,6 +3449,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
