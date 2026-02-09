@@ -1129,13 +1129,15 @@ if (!siteFolder) {
 }
 
 // Maintenant on scanne les sous-dossiers du site
-const folders = await fetchFolderContents(siteFolder.id);
+const folders = await fetchFolderContents(getDriveFolderId(siteFolder));
 
 
-        const tracatemp = folders.find(f =>
-            f.mimeType === "application/vnd.google-apps.folder" &&
-            f.name.toLowerCase().includes("traça_temp")
-        );
+
+const tracatemp = folders.find(f =>
+  isDriveFolderOrShortcutFolder(f) &&
+  (f.name.toLowerCase().includes("traça_temp") || f.name.toLowerCase().includes("traca_temp"))
+);
+
 
         if (!tracatemp) {
             console.warn("❌ Dossier Traça_Temp introuvable !");
@@ -1144,7 +1146,8 @@ const folders = await fetchFolderContents(siteFolder.id);
 
         console.log("✔ Dossier Traça_Temp trouvé :", tracatemp.name, tracatemp.id);
 
-        const files = await fetchFolderContents(tracatemp.id);
+        const files = await fetchFolderContents(getDriveFolderId(tracatemp));
+
 
         const csvName = `SA00094_${dateStr.replace(/-/g, "")}.csv`;
 
@@ -1160,7 +1163,9 @@ const folders = await fetchFolderContents(siteFolder.id);
         console.log("✔ Fichier trouvé :", file.name, file.id);
 
         // Téléchargement du CSV
-        const url = `https://smes21540.netlify.app/.netlify/functions/drive?id=${file.id}&name=${encodeURIComponent(file.name)}&site=Smes_Acces`;
+        const realId = getDriveFileId(file);
+const url = `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(file.name)}&site=Smes_Acces`;
+
 
         console.log("Téléchargement depuis :", url);
 
@@ -1713,7 +1718,10 @@ scanSiteHotDays(siteId).then(map => {
   }
 }
 
-previewFiles = filtered.filter(f => /\.(jpg|jpeg|pdf|mp4|gif|webm|mov|m4v)$/i.test(f.name));
+previewFiles = filtered
+  .filter(f => /\.(jpg|jpeg|png|gif|webp|pdf|mp4|webm|mov|m4v)$/i.test(f.name))
+  .map(f => ({ ...f, _realId: getDriveFileId(f) }));
+
 
 displayFiles(filtered, nameSpan ? nameSpan.textContent : '');
 
@@ -1814,9 +1822,11 @@ await Promise.all(
       const key = m[1];
 
       try {
-        const res = await fetch(
-          `https://smes21540.netlify.app/.netlify/functions/drive?id=${file.id}&name=${encodeURIComponent(file.name)}&site=Smes_Acces`
-        );
+        const realId = getDriveFileId(file);
+const res = await fetch(
+  `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(file.name)}&site=Smes_Acces`
+);
+
         if (!res.ok) return;
 
         const text = await res.text();
@@ -1857,9 +1867,14 @@ function addNote(cell){
 
 
 
-for(const f of files){
-    // ❌ On n'affiche pas les .json : ils servent juste à poser 📝
-    if (f.name.toLowerCase().endsWith(".json")) continue;
+for (const f of files) {
+
+  // ✅ ID réel (si shortcut → targetId, sinon id normal)
+  const realId = getDriveFileId(f);
+
+  // ❌ On n'affiche pas les .json : ils servent juste à poser 📝
+  if (f.name.toLowerCase().endsWith(".json")) continue;
+
 
     // Date
     let date='';
@@ -1938,7 +1953,8 @@ if (f.name.toLowerCase().endsWith(".csv") &&
     try {
       if (cancelScan) { tdName.innerHTML = f.name; return; } // 🛑 stop si demandé
 
-      const url = `https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`;
+      const url = `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`;
+
 
       const res = await fetch(url);
       if (!res.ok) { tdName.innerHTML = f.name; return; }
@@ -2039,22 +2055,25 @@ const tdFolder=document.createElement('td'); tdFolder.textContent=folderName;
 
     const tdAction=document.createElement('td'); tdAction.className='action-cell';
     let html='';
-if(f.name.toLowerCase().endsWith('.csv')){
-  html+=`<a href="https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&download=1&site=Smes_Acces" target="_blank">
-          <button class="action-btn">Télécharger</button>
-        </a>`;
-  html+=`<button class="action-btn" onclick="openViewer('viewer.html','${f.id}','${f.name}')">Tableau</button>`;
+if (f.name.toLowerCase().endsWith('.csv')) {
+
+  html += `<a href="https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&download=1&site=Smes_Acces" target="_blank">
+            <button class="action-btn">Télécharger</button>
+          </a>`;
+
+  html += `<button class="action-btn" onclick="openViewer('viewer.html','${realId}','${f.name}')">Tableau</button>`;
 
   // 👇 bouton Courbes seulement si on n'est PAS dans Historique
   if (!folderName.toLowerCase().includes("historique")) {
-    html+=`<button class="action-btn" onclick="openViewer('viewer02.html','${f.id}','${f.name}')">Courbes</button>`;
+    html += `<button class="action-btn" onclick="openViewer('viewer02.html','${realId}','${f.name}')">Courbes</button>`;
   }
 
   // 👇 bouton Sondes uniquement si on est dans Traça_Temp
   if (folderName.toLowerCase().includes("traça_temp") || folderName.toLowerCase().includes("traca_temp")) {
-    html+=`<button class="action-btn" onclick="openViewer('index03.html','${f.id}','${f.name}')">Sondes</button>`;
+    html += `<button class="action-btn" onclick="openViewer('index03.html','${realId}','${f.name}')">Sondes</button>`;
   }
 }
+
 
 
 
@@ -2094,43 +2113,46 @@ if (
 
 
 
-if(/\.(jpg|jpeg|png|gif|webp)$/i.test(f.name)){
-  html+=`<img src="https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&site=Smes_Acces"
-    onclick="openModal('${f.id}')"
+if (/\.(jpg|jpeg|png|gif|webp)$/i.test(f.name)) {
+
+  html += `<img src="https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&site=Smes_Acces"
+    onclick="openModal('${realId}')"
     alt="aperçu">`;
 
-  html+=`<a href="https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&download=1&site=Smes_Acces" target="_blank">
-          <button class="action-btn">Télécharger</button>
-        </a>`;
+  html += `<a href="https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&download=1&site=Smes_Acces" target="_blank">
+            <button class="action-btn">Télécharger</button>
+          </a>`;
 }
 
 
+
 /* ✅ VIDEO (MP4/WEBM/MOV/M4V) */
-if(/\.(mp4|webm|mov|m4v)$/i.test(f.name)){
+if (/\.(mp4|webm|mov|m4v)$/i.test(f.name)) {
   html += `
-    <button class="action-btn" onclick="openModal('${f.id}')">Ouvrir</button>
-    <a href="https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&download=1&site=Smes_Acces" target="_blank">
+    <button class="action-btn" onclick="openModal('${realId}')">Ouvrir</button>
+    <a href="https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&download=1&site=Smes_Acces" target="_blank">
       <button class="action-btn">Télécharger</button>
     </a>
   `;
 }
+
 
 
 
 // === PDF ===
 if (f.name.toLowerCase().endsWith(".pdf")) {
   html += `
-    <a href="https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&download=1&site=Smes_Acces" target="_blank">
+    <a href="https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&download=1&site=Smes_Acces" target="_blank">
       <button class="action-btn">Télécharger</button>
     </a>
-    <button class="action-btn" onclick="openModal('${f.id}')">Ouvrir</button>
-
+    <button class="action-btn" onclick="openModal('${realId}')">Ouvrir</button>
   `;
 }
 
+
 // === PowerPoint (ppsx/pptx) ===
 if (/\.(ppsx|pptx)$/i.test(f.name)) {
-  const baseUrl = `https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`;
+  const baseUrl = `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`;
 
   html += `
     <a href="${baseUrl}&download=1" target="_blank">
@@ -2141,6 +2163,7 @@ if (/\.(ppsx|pptx)$/i.test(f.name)) {
     </a>
   `;
 }
+
 
 
   
@@ -2234,7 +2257,8 @@ async function openViewer(viewer, id, name){
   });
 
   localStorage.setItem("csvFilesList", JSON.stringify(allCsv));
-  const index = allCsv.findIndex(f => f.id === id);
+  const index = allCsv.findIndex(f => getDriveFileId(f) === id);
+
   localStorage.setItem("csvFileIndex", index);
 
   // 🔍 Vérifier plan_sondes.csv
@@ -2251,7 +2275,11 @@ localStorage.setItem("currentFolderPath", folderPath);
 
   if (planFile) {
     try {
-      const respPlan = await fetch(`https://smes21540.netlify.app/.netlify/functions/drive?id=${planFile.id}&name=${encodeURIComponent(planFile.name)}&site=Smes_Acces`);
+      const planId = getDriveFileId(planFile);
+const respPlan = await fetch(
+  `https://smes21540.netlify.app/.netlify/functions/drive?id=${planId}&name=${encodeURIComponent(planFile.name)}&site=Smes_Acces`
+);
+
       const textPlan = await respPlan.text();
       localStorage.setItem("planSondes", textPlan);
     } catch (e) {
@@ -2335,9 +2363,11 @@ function resetDateFilterUIAndState(){
 /* ----------- Modale images / pdf / video + navigation ----------- */
 
 function openModal(id) {
-  currentPreviewIndex = previewFiles.findIndex(f => f.id === id);
+  currentPreviewIndex = previewFiles.findIndex(f => (f._realId || f.id) === id);
   const file = previewFiles[currentPreviewIndex];
-  if (!file) return; // ✅ n'ouvre pas une modale vide
+  if (!file) return;
+
+  const realId = file._realId || file.id;
 
   const modal = document.getElementById('imageModal');
   modal.style.display = 'flex';
@@ -2346,60 +2376,44 @@ function openModal(id) {
   const video = document.getElementById('modalVideo');
   const img   = document.getElementById('modalImg');
 
-
   const url =
     `https://smes21540.netlify.app/.netlify/functions/drive` +
-    `?id=${id}&name=${encodeURIComponent(file.name)}&site=Smes_Acces`;
+    `?id=${realId}&name=${encodeURIComponent(file.name)}&site=Smes_Acces`;
 
   const isVideo = /\.(mp4|webm|mov|m4v)$/i.test(file.name);
   const isPdf   = /\.pdf$/i.test(file.name);
   const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(file.name);
 
-  // 🔄 Reset complet
-  frame.style.display = "none";
-  frame.src = "";
+  // Reset
+  frame.style.display = "none"; frame.src = "";
+  video.pause(); video.style.display = "none"; video.src = "";
+  img.style.display = "none"; img.src = "";
 
-  video.pause();
-  video.style.display = "none";
-  video.src = "";
-
-  img.style.display = "none";
-  img.src = "";
-
-  // 🎯 Affichage selon type
   if (isVideo) {
-
     video.style.display = "block";
     video.src = url;
     video.load();
-
   } else if (isPdf) {
-
     frame.style.display = "block";
     frame.src = url;
-
   } else if (isImage) {
-
     img.style.display = "block";
     img.src = url;
-
   } else {
-
-    // fallback
     frame.style.display = "block";
     frame.src = url;
   }
 
-  // ⬇️ Bouton téléchargement
   document.getElementById('downloadBtn').onclick = () => {
     window.open(
       `https://smes21540.netlify.app/.netlify/functions/drive` +
-      `?id=${id}&name=${encodeURIComponent(file.name)}` +
+      `?id=${realId}&name=${encodeURIComponent(file.name)}` +
       `&download=1&site=Smes_Acces`,
       '_blank'
     );
   };
 }
+
 
 
 /* ----------- Fermeture modale ----------- */
@@ -2429,15 +2443,18 @@ function closeModal(){
 
 document.getElementById('prevBtn').onclick = () => {
   if (currentPreviewIndex > 0) {
-    openModal(previewFiles[--currentPreviewIndex].id);
+    const f = previewFiles[--currentPreviewIndex];
+    openModal(f._realId || f.id);
   }
 };
 
 document.getElementById('nextBtn').onclick = () => {
   if (currentPreviewIndex < previewFiles.length - 1) {
-    openModal(previewFiles[++currentPreviewIndex].id);
+    const f = previewFiles[++currentPreviewIndex];
+    openModal(f._realId || f.id);
   }
 };
+
 
 
 /* ----------- Click hors contenu = fermer ----------- */
@@ -2455,13 +2472,16 @@ window.addEventListener('keydown', e => {
   const modal = document.getElementById('imageModal');
   if (modal.style.display !== 'flex') return;
 
-  if (e.key === 'ArrowLeft' && currentPreviewIndex > 0) {
-    openModal(previewFiles[--currentPreviewIndex].id);
-  }
+if (e.key === 'ArrowLeft' && currentPreviewIndex > 0) {
+  const f = previewFiles[--currentPreviewIndex];
+  openModal(f._realId || f.id);
+}
 
-  if (e.key === 'ArrowRight' && currentPreviewIndex < previewFiles.length - 1) {
-    openModal(previewFiles[++currentPreviewIndex].id);
-  }
+if (e.key === 'ArrowRight' && currentPreviewIndex < previewFiles.length - 1) {
+  const f = previewFiles[++currentPreviewIndex];
+  openModal(f._realId || f.id);
+}
+
 
   if (e.key === 'Escape') {
     closeModal();
@@ -2521,7 +2541,9 @@ document.getElementById('downloadFolderBtn').onclick=async()=>{
   for(const f of files){
     if(zipCancelled) return;
     try{
-const url = `https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`;
+const realId = getDriveFileId(f);
+const url = `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`;
+
 
 const res = await fetch(url);
 
@@ -2685,9 +2707,11 @@ if (!tracatemp) {
 
     for (const f of csvFiles) {
       try {
-        const res = await fetch(
-          `https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`
-        );
+const realId = getDriveFileId(f);
+const res = await fetch(
+  `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`
+);
+
         if (!res.ok) continue;
 
         const text = await res.text();
@@ -2784,7 +2808,9 @@ async function checkTraçaTempToday(parentLi, tracatempId) {
   if (!todayFile) return;
 
   try {
-const url = `https://smes21540.netlify.app/.netlify/functions/drive?id=${todayFile.id}&name=${encodeURIComponent(todayFile.name)}&t=${Date.now()}&site=Smes_Acces`;
+const realId = getDriveFileId(todayFile);
+const url = `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(todayFile.name)}&t=${Date.now()}&site=Smes_Acces`;
+
 
 const res = await fetch(url);
 
@@ -3079,9 +3105,11 @@ document.getElementById("exportExcelGazBtn").addEventListener("click", function 
 // === Calcule les valeurs GAZ pour une ligne
 // =========================================
 async function computeGazForRow({ f, tdAction, tr, tdDate }) {
-  const res = await fetch(
-    `https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`
-  );
+const realId = getDriveFileId(f);
+const res = await fetch(
+  `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`
+);
+
   if (!res.ok) throw new Error("Fetch CSV GAZ failed: " + res.status);
 
   const text = await res.text();
@@ -3433,7 +3461,10 @@ if (childLi) {
   const filtered = files2.filter(x =>
     /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(x.name)
   );
-  previewFiles = filtered.filter(x => /\.(jpg|jpeg|pdf|mp4|gif|webm|mov|m4v)$/i.test(x.name));
+  previewFiles = filtered
+  .filter(x => /\.(jpg|jpeg|png|gif|webp|pdf|mp4|webm|mov|m4v)$/i.test(x.name))
+  .map(x => ({ ...x, _realId: getDriveFileId(x) }));
+
   displayFiles(filtered, f.name);
 }
 
@@ -3530,6 +3561,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
