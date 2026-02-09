@@ -1611,20 +1611,71 @@ console.log("[Folder] Chemin complet enregistré :", fullPath);
 
   const folderName = nameSpan ? nameSpan.textContent.toLowerCase() : "";
 
-  // ⚡ Gestion spéciale Z3
-  if (folderName.includes("traça_temp") || folderName.includes("traca_temp")) {
-    // récupérer le dossier parent (= site)
-    const siteLi = li.parentElement.closest("li");
-    if (siteLi && siteLi.dataset.id) {
-      const siblings = await fetchFolderContents(siteLi.dataset.id);
-const hist = siblings.find(s => {
-  if (!isDriveFolderOrShortcutFolder(s)) return false;
-  return (s.name || "").toLowerCase().includes("historique");
-});
+  // ⚡ Gestion spéciale Z3 (cache des fichiers Z3 depuis "Historique")
+const folderNameLower = (nameSpan ? nameSpan.textContent : "").toLowerCase();
 
-if (hist) {
-  const histFiles = await fetchFolderContents(getDriveFolderId(hist));
-  ...
+if (folderNameLower.includes("traça_temp") || folderNameLower.includes("traca_temp")) {
+  // récupérer le dossier parent (= site)
+  const siteLi = li.parentElement.closest("li");
+
+  if (siteLi && siteLi.dataset.id) {
+    try {
+      // Liste les dossiers au niveau du site
+      const siblings = await fetchFolderContents(siteLi.dataset.id);
+
+      // Trouve le dossier "Historique" (dossier normal ou raccourci vers dossier)
+      const hist = siblings.find(s =>
+        isDriveFolderOrShortcutFolder(s) &&
+        ((s.name || "").toLowerCase().includes("historique"))
+      );
+
+      if (hist) {
+        // Charge les fichiers du dossier Historique (en respectant les raccourcis)
+        const histId = getDriveFolderId(hist);
+        const histFiles = await fetchFolderContents(histId);
+
+        // Garde les Z3*.csv
+        const z3Files = (histFiles || []).filter(ff =>
+          (ff.name || "").toUpperCase().startsWith("Z3") &&
+          (ff.name || "").toLowerCase().endsWith(".csv")
+        );
+
+        localStorage.setItem("csvZ3Files", JSON.stringify(z3Files));
+        console.log("[Z3] Préchargés depuis Historique voisin:", z3Files.length);
+
+      } else {
+        localStorage.removeItem("csvZ3Files");
+        console.warn("[Z3] Aucun dossier Historique trouvé pour", nameSpan ? nameSpan.textContent : "(inconnu)");
+      }
+
+    } catch (e) {
+      console.error("[Z3] Erreur préchargement Historique:", e);
+      localStorage.removeItem("csvZ3Files");
+    }
+  }
+
+} else if (folderNameLower.includes("historique")) {
+  // Si on est dans Historique, on charge directement les Z3 de CE dossier
+  try {
+    const histFiles = await fetchFolderContents(li.dataset.id);
+
+    const z3Files = (histFiles || []).filter(ff =>
+      (ff.name || "").toUpperCase().startsWith("Z3") &&
+      (ff.name || "").toLowerCase().endsWith(".csv")
+    );
+
+    localStorage.setItem("csvZ3Files", JSON.stringify(z3Files));
+    console.log("[Z3] Préchargés directement (Historique):", z3Files.length);
+
+  } catch (e) {
+    console.error("[Z3] Erreur lecture Historique:", e);
+    localStorage.removeItem("csvZ3Files");
+  }
+
+} else {
+  // Sinon → effacer le cache Z3
+  localStorage.removeItem("csvZ3Files");
+  console.log("[Z3] Cache vidé (hors Traça_Temp / Historique)");
 }
 
 
@@ -3603,6 +3654,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
