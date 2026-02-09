@@ -3269,11 +3269,28 @@ async function renderSiteSubfolderTiles(siteId, siteName="") {
 
   tiles.innerHTML = "";
 
-  // Si pas de sous-dossiers → on ne montre pas les tuiles (on laisse le flux classique)
+  // Si pas de sous-dossiers -> afficher directement les fichiers du site
   if (!folders.length){
-    hideSiteTiles();           // ✅ et donc on revoit le tableau
+    hideSiteTiles();
+
+    // mémorise le dossier courant comme "dernier dossier"
+    localStorage.setItem('lastFolderId', siteId);
+    localStorage.setItem("lastFolderPath", siteName || "");
+
+    const files2 = await fetchFolderContents(siteId);
+    const filtered = (files2 || []).filter(x =>
+      /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(x.name)
+    );
+
+    // preview : inclure images + pdf + vidéos
+    previewFiles = filtered.filter(x =>
+      /\.(jpg|jpeg|png|gif|webp|pdf|mp4|webm|mov|m4v)$/i.test(x.name)
+    );
+
+    displayFiles(filtered, siteName || "");
     return;
   }
+
 
   // petit titre au-dessus des tuiles (optionnel mais pratique)
   const head = document.createElement("div");
@@ -3413,6 +3430,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
