@@ -203,7 +203,11 @@ if (list) {
     const params = new URLSearchParams();
     // ⚠️ ne pas encodeURIComponent(id) à l'intérieur de q
     params.set("q", `'${id}' in parents and trashed=false`);
-    params.set("fields", "nextPageToken, files(id,name,mimeType,size,createdTime,modifiedTime)");
+    params.set(
+  "fields",
+  "nextPageToken, files(id,name,mimeType,size,createdTime,modifiedTime,shortcutDetails)"
+);
+
     params.set("pageSize", "1000");
     params.set("supportsAllDrives", "true");
     params.set("includeItemsFromAllDrives", "true");
