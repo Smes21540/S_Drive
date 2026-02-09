@@ -689,6 +689,12 @@ body[data-theme="orange"] #smes-footer-bg {
   margin:0;
 }
 
+.site-tiles{
+  z-index: 1200;
+  pointer-events: auto;
+}
+
+  
 
 .site-tile{
   background: var(--panel);
@@ -1406,6 +1412,26 @@ span.onclick = async (e) => {
   }, 1000);
 }
 
+
+async function expandFolder(li){
+  if (!li) return;
+
+  // Si pas encore chargé → on charge
+  if (li.dataset.loaded !== "true") {
+    await toggleFolder(li); 
+    // toggleFolder va créer <ul> et laisser affiché
+    return;
+  }
+
+  // Si déjà chargé → on force ouvert (NE PAS REPLIER)
+  const ul = li.querySelector("ul");
+  if (ul) ul.style.display = "block";
+}
+
+
+
+
+  
 async function toggleFolder(li, event){
 
   // 🛡️ Anti double-clic / anti double chargement concurrent
@@ -3414,18 +3440,17 @@ if (childLi) {
 
 // Clique sur un site (tile ou sidebar) → ouvre l'arbre + affiche les sous-dossiers en tuiles
 async function openSiteAndShowTiles(siteId, siteName="") {
-  // ✅ on affiche les contrôles pour que la box "Campagnes" puisse apparaître
   const controls = document.querySelector(".controls");
   if (controls) controls.style.display = "flex";
 
-  // ✅ charge les campagnes du site TOUT DE SUITE (avant même un dossier final)
   await refreshCampaignUIForSite(siteId);
 
   const li = document.querySelector(`#folderTree > li[data-id="${siteId}"]`);
-  if (li) await toggleFolder(li);     // ✅ charge/affiche les sous-dossiers dans la sidebar
+  if (li) await expandFolder(li);   // ✅ au lieu de toggleFolder(li)
 
   await renderSiteSubfolderTiles(siteId, siteName);
 }
+
 
 
   
@@ -3497,6 +3522,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
