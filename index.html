@@ -689,12 +689,6 @@ body[data-theme="orange"] #smes-footer-bg {
   margin:0;
 }
 
-.site-tiles{
-  z-index: 1200;
-  pointer-events: auto;
-}
-
-  
 
 .site-tile{
   background: var(--panel);
@@ -934,14 +928,6 @@ let filterStartDate="", filterEndDate="";
 let themeMenuTimer;
 let cancelScan = false; // 🛑 permet d’arrêter le scan si on clique ailleurs
 
-// === Anti race-condition UI (tuiles/tableau) ===
-let NAV_TOKEN = 0;
-function nextNavToken() {
-  NAV_TOKEN += 1;
-  return NAV_TOKEN;
-}
-
-
 function isDriveFolderOrShortcutFolder(f){
   return (
     f?.mimeType === "application/vnd.google-apps.folder" ||
@@ -963,97 +949,6 @@ function getDriveFileId(f){
   }
   return f?.id; // ✅ fichier normal
 }
-
-
-function isDisplayableFile(f){
-  if (!f) return false;
-  if (isDriveFolderOrShortcutFolder(f)) return false;
-
-  const name = (f.name || "").toLowerCase();
-  const mt   = (f.mimeType || "").toLowerCase();
-  const tmt  = (f.shortcutDetails?.targetMimeType || "").toLowerCase();
-
-  // 1) Extension (ton filtre actuel)
-  const byExt = /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(name);
-
-  // 2) MimeType (PDF sans extension, etc.)
-  const byMime =
-    mt === "application/pdf" ||
-    mt.startsWith("image/") ||
-    mt.startsWith("video/") ||
-    mt === "text/csv" ||
-    mt === "application/json" ||
-    mt === "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
-    mt === "application/vnd.ms-powerpoint";
-
-  // 3) Shortcut -> targetMimeType
-  const byTarget =
-    tmt === "application/pdf" ||
-    tmt.startsWith("image/") ||
-    tmt.startsWith("video/") ||
-    tmt === "text/csv" ||
-    tmt === "application/json" ||
-    tmt === "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
-    tmt === "application/vnd.ms-powerpoint";
-
-  return byExt || byMime || byTarget;
-}
-
-function isPreviewableFile(f){
-  if (!f) return false;
-  const name = (f.name || "").toLowerCase();
-  const mt   = (f.mimeType || "").toLowerCase();
-  const tmt  = (f.shortcutDetails?.targetMimeType || "").toLowerCase();
-
-  const byExt = /\.(jpg|jpeg|png|gif|webp|pdf|mp4|webm|mov|m4v)$/i.test(name);
-  const byMime = mt === "application/pdf" || mt.startsWith("image/") || mt.startsWith("video/");
-  const byTarget = tmt === "application/pdf" || tmt.startsWith("image/") || tmt.startsWith("video/");
-
-  return byExt || byMime || byTarget;
-}
-
-function isPdfFile(f){
-  const name = (f?.name || "").toLowerCase();
-  const mt   = (f?.mimeType || "").toLowerCase();
-  const tmt  = (f?.shortcutDetails?.targetMimeType || "").toLowerCase();
-  return name.endsWith(".pdf") || mt === "application/pdf" || tmt === "application/pdf";
-}
-
-function isPptFile(f){
-  const name = (f?.name || "").toLowerCase();
-  const mt   = (f?.mimeType || "").toLowerCase();
-  const tmt  = (f?.shortcutDetails?.targetMimeType || "").toLowerCase();
-  return (
-    /\.(ppsx|pptx)$/i.test(name) ||
-    mt === "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
-    mt === "application/vnd.ms-powerpoint" ||
-    tmt === "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
-    tmt === "application/vnd.ms-powerpoint"
-  );
-}
-
-function isImageFile(f){
-  const name = (f?.name || "").toLowerCase();
-  const mt   = (f?.mimeType || "").toLowerCase();
-  const tmt  = (f?.shortcutDetails?.targetMimeType || "").toLowerCase();
-  return (
-    /\.(jpg|jpeg|png|gif|webp)$/i.test(name) ||
-    mt.startsWith("image/") ||
-    tmt.startsWith("image/")
-  );
-}
-
-function isVideoFile(f){
-  const name = (f?.name || "").toLowerCase();
-  const mt   = (f?.mimeType || "").toLowerCase();
-  const tmt  = (f?.shortcutDetails?.targetMimeType || "").toLowerCase();
-  return (
-    /\.(mp4|webm|mov|m4v)$/i.test(name) ||
-    mt.startsWith("video/") ||
-    tmt.startsWith("video/")
-  );
-}
-
 
   
 
@@ -1228,15 +1123,13 @@ if (!siteFolder) {
 }
 
 // Maintenant on scanne les sous-dossiers du site
-const folders = await fetchFolderContents(getDriveFolderId(siteFolder));
+const folders = await fetchFolderContents(siteFolder.id);
 
 
-
-const tracatemp = folders.find(f =>
-  isDriveFolderOrShortcutFolder(f) &&
-  (f.name.toLowerCase().includes("traça_temp") || f.name.toLowerCase().includes("traca_temp"))
-);
-
+        const tracatemp = folders.find(f =>
+            f.mimeType === "application/vnd.google-apps.folder" &&
+            f.name.toLowerCase().includes("traça_temp")
+        );
 
         if (!tracatemp) {
             console.warn("❌ Dossier Traça_Temp introuvable !");
@@ -1245,8 +1138,7 @@ const tracatemp = folders.find(f =>
 
         console.log("✔ Dossier Traça_Temp trouvé :", tracatemp.name, tracatemp.id);
 
-        const files = await fetchFolderContents(getDriveFolderId(tracatemp));
-
+        const files = await fetchFolderContents(tracatemp.id);
 
         const csvName = `SA00094_${dateStr.replace(/-/g, "")}.csv`;
 
@@ -1262,9 +1154,7 @@ const tracatemp = folders.find(f =>
         console.log("✔ Fichier trouvé :", file.name, file.id);
 
         // Téléchargement du CSV
-        const realId = getDriveFileId(file);
-const url = `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(file.name)}&site=Smes_Acces`;
-
+        const url = `https://smes21540.netlify.app/.netlify/functions/drive?id=${file.id}&name=${encodeURIComponent(file.name)}&site=Smes_Acces`;
 
         console.log("Téléchargement depuis :", url);
 
@@ -1503,49 +1393,19 @@ span.onclick = async (e) => {
 
   // 🔥 Vérifier automatiquement deux crans plus bas sans ouvrir visuellement
   setTimeout(async () => {
-    const siteFolders = Array.from(document.querySelectorAll("#folderTree > li"));
+    const siteFolders = document.querySelectorAll("#folderTree > li");
 
-    const limit = 3;
-    let idx = 0;
-
-    async function worker(){
-      while(idx < siteFolders.length){
-        const siteLi = siteFolders[idx++];
-        const subFolders = await fetchChildren(siteLi.dataset.id);
-
-        for (const sub of subFolders) {
-          if ((sub.name || "").includes("Temp")) {
-            await checkTraçaTempToday(siteLi, getDriveFolderId(sub));
-          }
+    for (const siteLi of siteFolders) {
+      const subFolders = await fetchChildren(siteLi.dataset.id);
+      for (const sub of subFolders) {
+        if (sub.name.includes("Temp")) {
+          await checkTraçaTempToday(siteLi, sub.id); 
         }
       }
     }
-
-    await Promise.all(Array.from({ length: limit }, worker));
   }, 1000);
-
 }
 
-
-async function expandFolder(li){
-  if (!li) return;
-
-  // Si pas encore chargé → on charge
-  if (li.dataset.loaded !== "true") {
-    await toggleFolder(li); 
-    // toggleFolder va créer <ul> et laisser affiché
-    return;
-  }
-
-  // Si déjà chargé → on force ouvert (NE PAS REPLIER)
-  const ul = li.querySelector("ul");
-  if (ul) ul.style.display = "block";
-}
-
-
-
-
-  
 async function toggleFolder(li, event){
 
   // 🛡️ Anti double-clic / anti double chargement concurrent
@@ -1555,37 +1415,20 @@ async function toggleFolder(li, event){
   try {
     const toggle = li.querySelector('.folder-toggle');
 
-if (li.dataset.loaded === 'true') {
-  const ul = li.querySelector('ul');
-  if (!ul) return;
+    if (li.dataset.loaded === 'true') {
+      const ul = li.querySelector('ul');
+      if (!ul) return;
 
-  // ✅ APPEL PROGRAMMATIQUE → on ASSURE ouvert
-  if (!event) {
-    ul.style.display = 'block';
-    return;
-  }
+      // ✅ Ne replie pas le parent si on clique un sous-dossier
+      if (event && event.target && !event.target.classList.contains('folder-name')) return;
 
-  // ✅ CLIC UTILISATEUR SUR LA FLÈCHE → toggle
-  ul.style.display = (ul.style.display === 'none') ? 'block' : 'none';
-  return;
-}
-
+      ul.style.display = ul.style.display === 'none' ? 'block' : 'none';
+      return;
+    }
 
     toggle.textContent = '…';
 
     const files = await fetchFolderContents(li.dataset.id);
-
-console.log("DEBUG folder files:", files.map(f => ({
-  name: f.name,
-  mimeType: f.mimeType,
-  hasShortcutDetails: !!f.shortcutDetails,
-  targetId: f.shortcutDetails?.targetId,
-  targetMimeType: f.shortcutDetails?.targetMimeType,
-})));
-
-
-
-    
     const ul = document.createElement('ul');
 
 const folders = files
@@ -1617,10 +1460,7 @@ for (const f of folders) {
       ul.appendChild(childLi);
 
       // ✅ Vérif Temp (flamme 🔥)
-      if (f.name.includes("Temp")) {
-  checkTraçaTempToday(li, getDriveFolderId(f));
-}
-
+      if (f.name.includes("Temp")) { checkTraçaTempToday(li, f.id); }
     }
 
     li.appendChild(ul);
@@ -1655,10 +1495,6 @@ async function loadFolderFilesOnClick(li, event){
     }
   }
 
-  // ✅ Anti “retour tuiles” : dès qu’on ouvre un dossier, on invalide les renders tuiles en route
-  nextNavToken();
-  hideSiteTiles();
-  
   // ✅ 2) Si toujours rien, on sort proprement (plus de ReferenceError)
   if (!li) {
     console.warn("[loadFolderFilesOnClick] appelé sans li valide");
@@ -1717,109 +1553,56 @@ function buildFullFolderPath(li) {
 const fullPath = buildFullFolderPath(li);
 localStorage.setItem("lastFolderPath", fullPath);
 console.log("[Folder] Chemin complet enregistré :", fullPath);
-  
-function buildFolderIdChain(li) {
-  const ids = [];
-  let current = li;
-  while (current) {
-    if (current.dataset?.id) ids.unshift(current.dataset.id);
-    current = current.parentElement.closest("li");
-  }
-  return ids; // [siteId, ..., folderId]
-}
-
-const idChain = buildFolderIdChain(li);
-localStorage.setItem("lastFolderIdChain", JSON.stringify(idChain));
 
 
   const folderName = nameSpan ? nameSpan.textContent.toLowerCase() : "";
 
-// ⚡ Gestion spéciale Z3 (cache des fichiers Z3 depuis "Historique")
-const folderNameLower = (nameSpan ? nameSpan.textContent : "").toLowerCase();
-
-if (folderNameLower.includes("traça_temp") || folderNameLower.includes("traca_temp")) {
-
-  const siteLi = li.parentElement.closest("li");
-
-  if (siteLi && siteLi.dataset.id) {
-    try {
+  // ⚡ Gestion spéciale Z3
+  if (folderName.includes("traça_temp") || folderName.includes("traca_temp")) {
+    // récupérer le dossier parent (= site)
+    const siteLi = li.parentElement.closest("li");
+    if (siteLi && siteLi.dataset.id) {
       const siblings = await fetchFolderContents(siteLi.dataset.id);
-
-      const hist = siblings.find(s =>
-        isDriveFolderOrShortcutFolder(s) &&
-        (s.name || "").toLowerCase().includes("historique")
+      const hist = siblings.find(s => 
+        s.mimeType === 'application/vnd.google-apps.folder' && 
+        s.name.toLowerCase().includes("historique")
       );
 
       if (hist) {
-        const histId = getDriveFolderId(hist);
-        const histFiles = await fetchFolderContents(histId);
-
-        const z3Files = histFiles.filter(ff =>
-          ff.name.toUpperCase().startsWith("Z3") &&
-          ff.name.toLowerCase().endsWith(".CSV")
+        const histFiles = await fetchFolderContents(hist.id);
+        const z3Files = histFiles.filter(ff => 
+          ff.name.toUpperCase().startsWith("Z3") && 
+          ff.name.toLowerCase().endsWith(".csv")
         );
-
         localStorage.setItem("csvZ3Files", JSON.stringify(z3Files));
         console.log("[Z3] Préchargés depuis Historique voisin:", z3Files.length);
       } else {
         localStorage.removeItem("csvZ3Files");
+        console.warn("[Z3] Aucun dossier Historique trouvé pour", nameSpan.textContent);
       }
-
-    } catch (e) {
-      console.error("[Z3] Erreur préchargement Historique:", e);
-      localStorage.removeItem("csvZ3Files");
     }
-  }
-
-} else if (folderNameLower.includes("historique")) {
-
-  try {
+  } 
+  else if (folderName.includes("historique")) {
+    // directement charger les Z3 de ce dossier
     const histFiles = await fetchFolderContents(li.dataset.id);
-
-    const z3Files = histFiles.filter(ff =>
-      ff.name.toUpperCase().startsWith("Z3") &&
-      ff.name.toLowerCase().endsWith(".CSV")
+    const z3Files = histFiles.filter(ff => 
+      ff.name.toUpperCase().startsWith("Z3") && 
+      ff.name.toLowerCase().endsWith(".csv")
     );
-
     localStorage.setItem("csvZ3Files", JSON.stringify(z3Files));
     console.log("[Z3] Préchargés directement (Historique):", z3Files.length);
-
-  } catch (e) {
-    console.error("[Z3] Erreur lecture Historique:", e);
+  } 
+  else {
+    // Sinon → effacer le cache Z3
     localStorage.removeItem("csvZ3Files");
+    console.log("[Z3] Cache vidé (hors Traça_Temp / Historique)");
   }
 
-} else {
-  localStorage.removeItem("csvZ3Files");
-}
-
-
-
-
   // Charger fichiers CSV/JPG classiques du dossier
-const files = await fetchFolderContents(li.dataset.id);
-
-const subFolders = (files || []).filter(isDriveFolderOrShortcutFolder);
-
-// Tous les éléments qui NE SONT PAS des dossiers (donc fichiers + raccourcis fichiers,
-// même si Drive ne donne pas shortcutDetails)
-const nonFolderItems = (files || []).filter(f => !isDriveFolderOrShortcutFolder(f));
-
-// On garde ton filtre “propre”
-const displayable = nonFolderItems.filter(isDisplayableFile);
-
-// ✅ Mode tuiles seulement si VRAIMENT il n’y a AUCUN fichier (même non reconnu)
-if (nonFolderItems.length === 0 && subFolders.length > 0) {
-  const folderName = li.querySelector(".folder-name")?.textContent?.trim() || "";
-  await renderSiteSubfolderTiles(li.dataset.id, folderName);
-  return;
-}
-
-// ✅ Si Drive ne nous donne pas assez d’infos (PDF raccourci sans extension),
-// on affiche quand même la liste au lieu de revenir aux tuiles
-const filtered = (displayable.length > 0) ? displayable : nonFolderItems;
-
-
+  const files = await fetchFolderContents(li.dataset.id);
+const filtered = files.filter(f =>
+  /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(f.name)
+);
 
 
 
@@ -1849,7 +1632,6 @@ if (siteId && siteId !== currentSiteId) {
 // 🔥 Lancer le scan en arrière-plan sans bloquer l'affichage
 scanSiteHotDays(siteId).then(map => {
   hotDaysMap = map;
-  initDatePickers(); // ✅ ICI, et seulement ici
   console.log(`[CACHE] 🔥 ${Object.keys(hotDaysMap).length} jours chauds détectés et chargés pour ${siteRootLi?.querySelector(".folder-name")?.textContent}`);
 
 
@@ -1888,8 +1670,8 @@ document.querySelectorAll('#csvTable tbody tr').forEach(tr => {
 scanSiteHotDays(siteId).then(map => {
   hotDaysMap = map;
   console.log(`[CACHE] 🔥 ${Object.keys(hotDaysMap).length} jours chauds détectés et chargés pour ${siteRootLi?.querySelector(".folder-name")?.textContent}`);
-await refreshCurrentFolder();
-
+  const active = document.querySelector('#folderTree .active-folder');
+  if (active) active.click();
 });
 
   } else {
@@ -1897,11 +1679,7 @@ await refreshCurrentFolder();
   }
 }
 
-previewFiles = filtered
-  .filter(isPreviewableFile)
-  .map(f => ({ ...f, _realId: getDriveFileId(f) }));
-
-
+previewFiles = filtered.filter(f => /\.(jpg|jpeg|pdf|mp4|gif|webm|mov|m4v)$/i.test(f.name));
 
 displayFiles(filtered, nameSpan ? nameSpan.textContent : '');
 
@@ -2002,11 +1780,9 @@ await Promise.all(
       const key = m[1];
 
       try {
-        const realId = getDriveFileId(file);
-const res = await fetch(
-  `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(file.name)}&site=Smes_Acces`
-);
-
+        const res = await fetch(
+          `https://smes21540.netlify.app/.netlify/functions/drive?id=${file.id}&name=${encodeURIComponent(file.name)}&site=Smes_Acces`
+        );
         if (!res.ok) return;
 
         const text = await res.text();
@@ -2047,14 +1823,9 @@ function addNote(cell){
 
 
 
-for (const f of files) {
-
-  // ✅ ID réel (si shortcut → targetId, sinon id normal)
-  const realId = getDriveFileId(f);
-
-  // ❌ On n'affiche pas les .json : ils servent juste à poser 📝
-  if (f.name.toLowerCase().endsWith(".json")) continue;
-
+for(const f of files){
+    // ❌ On n'affiche pas les .json : ils servent juste à poser 📝
+    if (f.name.toLowerCase().endsWith(".json")) continue;
 
     // Date
     let date='';
@@ -2133,8 +1904,7 @@ if (f.name.toLowerCase().endsWith(".csv") &&
     try {
       if (cancelScan) { tdName.innerHTML = f.name; return; } // 🛑 stop si demandé
 
-      const url = `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`;
-
+      const url = `https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`;
 
       const res = await fetch(url);
       if (!res.ok) { tdName.innerHTML = f.name; return; }
@@ -2235,25 +2005,22 @@ const tdFolder=document.createElement('td'); tdFolder.textContent=folderName;
 
     const tdAction=document.createElement('td'); tdAction.className='action-cell';
     let html='';
-if (f.name.toLowerCase().endsWith('.csv')) {
-
-  html += `<a href="https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&download=1&site=Smes_Acces" target="_blank">
-            <button class="action-btn">Télécharger</button>
-          </a>`;
-
-  html += `<button class="action-btn" onclick="openViewer('viewer.html','${realId}','${f.name}')">Tableau</button>`;
+if(f.name.toLowerCase().endsWith('.csv')){
+  html+=`<a href="https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&download=1&site=Smes_Acces" target="_blank">
+          <button class="action-btn">Télécharger</button>
+        </a>`;
+  html+=`<button class="action-btn" onclick="openViewer('viewer.html','${f.id}','${f.name}')">Tableau</button>`;
 
   // 👇 bouton Courbes seulement si on n'est PAS dans Historique
   if (!folderName.toLowerCase().includes("historique")) {
-    html += `<button class="action-btn" onclick="openViewer('viewer02.html','${realId}','${f.name}')">Courbes</button>`;
+    html+=`<button class="action-btn" onclick="openViewer('viewer02.html','${f.id}','${f.name}')">Courbes</button>`;
   }
 
   // 👇 bouton Sondes uniquement si on est dans Traça_Temp
   if (folderName.toLowerCase().includes("traça_temp") || folderName.toLowerCase().includes("traca_temp")) {
-    html += `<button class="action-btn" onclick="openViewer('index03.html','${realId}','${f.name}')">Sondes</button>`;
+    html+=`<button class="action-btn" onclick="openViewer('index03.html','${f.id}','${f.name}')">Sondes</button>`;
   }
 }
-
 
 
 
@@ -2293,64 +2060,43 @@ if (
 
 
 
-if (isImageFile(f)) {
-
-
-  html += `<img src="https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&site=Smes_Acces"
-    onclick="openModal('${realId}')"
+if(/\.(jpg|jpeg|png|gif|webp)$/i.test(f.name)){
+  html+=`<img src="https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&site=Smes_Acces"
+    onclick="openModal('${f.id}')"
     alt="aperçu">`;
 
-  html += `<a href="https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&download=1&site=Smes_Acces" target="_blank">
-            <button class="action-btn">Télécharger</button>
-          </a>`;
+  html+=`<a href="https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&download=1&site=Smes_Acces" target="_blank">
+          <button class="action-btn">Télécharger</button>
+        </a>`;
 }
 
 
-
 /* ✅ VIDEO (MP4/WEBM/MOV/M4V) */
-if (isVideoFile(f)) {
-
+if(/\.(mp4|webm|mov|m4v)$/i.test(f.name)){
   html += `
-    <button class="action-btn" onclick="openModal('${realId}')">Ouvrir</button>
-    <a href="https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&download=1&site=Smes_Acces" target="_blank">
+    <button class="action-btn" onclick="openModal('${f.id}')">Ouvrir</button>
+    <a href="https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&download=1&site=Smes_Acces" target="_blank">
       <button class="action-btn">Télécharger</button>
     </a>
   `;
 }
-
 
 
 
 // === PDF ===
-if (isPdfFile(f)) {
-
+if (f.name.toLowerCase().endsWith(".pdf")) {
   html += `
-    <a href="https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&download=1&site=Smes_Acces" target="_blank">
+    <a href="https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&download=1&site=Smes_Acces" target="_blank">
       <button class="action-btn">Télécharger</button>
     </a>
-    <button class="action-btn" onclick="openModal('${realId}')">Ouvrir</button>
+    <button class="action-btn" onclick="openModal('${f.id}')">Ouvrir</button>
+
   `;
 }
-
 
 // === PowerPoint (ppsx/pptx) ===
-if (isPptFile(f)) {
-
-  const baseUrl = `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`;
-
-  html += `
-    <a href="${baseUrl}&download=1" target="_blank">
-      <button class="action-btn">Télécharger</button>
-    </a>
-    <a href="${baseUrl}" target="_blank">
-      <button class="action-btn">Ouvrir</button>
-    </a>
-  `;
-}
-
-// === Fallback : fichier non reconnu => on propose Ouvrir + Télécharger quand même ===
-if (!isImageFile(f) && !isVideoFile(f) && !isPdfFile(f) && !isPptFile(f) && !f.name.toLowerCase().endsWith(".csv")) {
-  const baseUrl = `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`;
+if (/\.(ppsx|pptx)$/i.test(f.name)) {
+  const baseUrl = `https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`;
 
   html += `
     <a href="${baseUrl}&download=1" target="_blank">
@@ -2454,8 +2200,7 @@ async function openViewer(viewer, id, name){
   });
 
   localStorage.setItem("csvFilesList", JSON.stringify(allCsv));
-  const index = allCsv.findIndex(f => getDriveFileId(f) === id);
-
+  const index = allCsv.findIndex(f => f.id === id);
   localStorage.setItem("csvFileIndex", index);
 
   // 🔍 Vérifier plan_sondes.csv
@@ -2472,11 +2217,7 @@ localStorage.setItem("currentFolderPath", folderPath);
 
   if (planFile) {
     try {
-      const planId = getDriveFileId(planFile);
-const respPlan = await fetch(
-  `https://smes21540.netlify.app/.netlify/functions/drive?id=${planId}&name=${encodeURIComponent(planFile.name)}&site=Smes_Acces`
-);
-
+      const respPlan = await fetch(`https://smes21540.netlify.app/.netlify/functions/drive?id=${planFile.id}&name=${encodeURIComponent(planFile.name)}&site=Smes_Acces`);
       const textPlan = await respPlan.text();
       localStorage.setItem("planSondes", textPlan);
     } catch (e) {
@@ -2526,14 +2267,8 @@ async function clearFilter(){
   filterStartDate = '';
   filterEndDate   = '';
 
-suppressAutoFilter = true;
-try {
   fpStart?.clear();
   fpEnd?.clear();
-} finally {
-  suppressAutoFilter = false;
-}
-
 
   // ✅ désactive campagne
   activeCampaignKey = "";
@@ -2566,11 +2301,9 @@ function resetDateFilterUIAndState(){
 /* ----------- Modale images / pdf / video + navigation ----------- */
 
 function openModal(id) {
-  currentPreviewIndex = previewFiles.findIndex(f => (f._realId || f.id) === id);
+  currentPreviewIndex = previewFiles.findIndex(f => f.id === id);
   const file = previewFiles[currentPreviewIndex];
-  if (!file) return;
-
-  const realId = file._realId || file.id;
+  if (!file) return; // ✅ n'ouvre pas une modale vide
 
   const modal = document.getElementById('imageModal');
   modal.style.display = 'flex';
@@ -2579,45 +2312,60 @@ function openModal(id) {
   const video = document.getElementById('modalVideo');
   const img   = document.getElementById('modalImg');
 
+
   const url =
     `https://smes21540.netlify.app/.netlify/functions/drive` +
-    `?id=${realId}&name=${encodeURIComponent(file.name)}&site=Smes_Acces`;
+    `?id=${id}&name=${encodeURIComponent(file.name)}&site=Smes_Acces`;
 
-const isVideo = isVideoFile(file);
-const isPdf   = isPdfFile(file);
-const isImage = isImageFile(file);
+  const isVideo = /\.(mp4|webm|mov|m4v)$/i.test(file.name);
+  const isPdf   = /\.pdf$/i.test(file.name);
+  const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(file.name);
 
+  // 🔄 Reset complet
+  frame.style.display = "none";
+  frame.src = "";
 
-  // Reset
-  frame.style.display = "none"; frame.src = "";
-  video.pause(); video.style.display = "none"; video.src = "";
-  img.style.display = "none"; img.src = "";
+  video.pause();
+  video.style.display = "none";
+  video.src = "";
 
+  img.style.display = "none";
+  img.src = "";
+
+  // 🎯 Affichage selon type
   if (isVideo) {
+
     video.style.display = "block";
     video.src = url;
     video.load();
+
   } else if (isPdf) {
+
     frame.style.display = "block";
     frame.src = url;
+
   } else if (isImage) {
+
     img.style.display = "block";
     img.src = url;
+
   } else {
+
+    // fallback
     frame.style.display = "block";
     frame.src = url;
   }
 
+  // ⬇️ Bouton téléchargement
   document.getElementById('downloadBtn').onclick = () => {
     window.open(
       `https://smes21540.netlify.app/.netlify/functions/drive` +
-      `?id=${realId}&name=${encodeURIComponent(file.name)}` +
+      `?id=${id}&name=${encodeURIComponent(file.name)}` +
       `&download=1&site=Smes_Acces`,
       '_blank'
     );
   };
 }
-
 
 
 /* ----------- Fermeture modale ----------- */
@@ -2647,18 +2395,15 @@ function closeModal(){
 
 document.getElementById('prevBtn').onclick = () => {
   if (currentPreviewIndex > 0) {
-    const f = previewFiles[--currentPreviewIndex];
-    openModal(f._realId || f.id);
+    openModal(previewFiles[--currentPreviewIndex].id);
   }
 };
 
 document.getElementById('nextBtn').onclick = () => {
   if (currentPreviewIndex < previewFiles.length - 1) {
-    const f = previewFiles[++currentPreviewIndex];
-    openModal(f._realId || f.id);
+    openModal(previewFiles[++currentPreviewIndex].id);
   }
 };
-
 
 
 /* ----------- Click hors contenu = fermer ----------- */
@@ -2676,16 +2421,13 @@ window.addEventListener('keydown', e => {
   const modal = document.getElementById('imageModal');
   if (modal.style.display !== 'flex') return;
 
-if (e.key === 'ArrowLeft' && currentPreviewIndex > 0) {
-  const f = previewFiles[--currentPreviewIndex];
-  openModal(f._realId || f.id);
-}
+  if (e.key === 'ArrowLeft' && currentPreviewIndex > 0) {
+    openModal(previewFiles[--currentPreviewIndex].id);
+  }
 
-if (e.key === 'ArrowRight' && currentPreviewIndex < previewFiles.length - 1) {
-  const f = previewFiles[++currentPreviewIndex];
-  openModal(f._realId || f.id);
-}
-
+  if (e.key === 'ArrowRight' && currentPreviewIndex < previewFiles.length - 1) {
+    openModal(previewFiles[++currentPreviewIndex].id);
+  }
 
   if (e.key === 'Escape') {
     closeModal();
@@ -2745,9 +2487,7 @@ document.getElementById('downloadFolderBtn').onclick=async()=>{
   for(const f of files){
     if(zipCancelled) return;
     try{
-const realId = getDriveFileId(f);
-const url = `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`;
-
+const url = `https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`;
 
 const res = await fetch(url);
 
@@ -2890,46 +2630,93 @@ let hotDaysMap = {}; // { 'YYYYMMDD': true }
 
 async function scanSiteHotDays(siteId) {
   const hotDays = {};
-  const label = `[SCAN] Durée scanSiteHotDays (${siteId})`;
-  console.time(label);
+  console.time(`[SCAN] Durée scanSiteHotDays (${siteId})`);
+  console.log(`[SCAN] Scan du site ${siteId} → dossier Traça_Temp`);
 
   try {
     const siblings = await fetchFolderContents(siteId);
-
-    const tracatemp = siblings.find(s =>
-      isDriveFolderOrShortcutFolder(s) &&
-      /trac(a|ç)[ _-]*temp/i.test(s.name || "")
+    const tracatemp = siblings.find(s => 
+      s.mimeType === 'application/vnd.google-apps.folder' &&
+      (s.name.toLowerCase().includes("traça_temp") || s.name.toLowerCase().includes("traca_temp"))
     );
-
-    if (!tracatemp) {
-      console.warn(`[SCAN] Aucun dossier Traça_Temp trouvé pour le site ${siteId}`);
-      return hotDays;
-    }
-
-    const tracatempId = getDriveFolderId(tracatemp);
-    const files = await fetchFolderContents(tracatempId);
-
-    const csvFiles = files.filter(f => (f.name || "").toLowerCase().endsWith(".csv"));
-
-    for (const f of csvFiles) {
-      // ... ton scan ...
-    }
-
-    localStorage.setItem(`hotDays_${siteId}`, JSON.stringify(hotDays));
-    return hotDays;
-
-  } catch (err) {
-    console.error("[SCAN] Erreur générale scanSiteHotDays:", err);
-    return hotDays;
-  } finally {
-    console.timeEnd(label);
-  }
+if (!tracatemp) {
+  console.warn(`[SCAN] Aucun dossier Traça_Temp trouvé pour le site ${siteId}`);
+  return hotDays;
 }
 
 
+    const files = await fetchFolderContents(tracatemp.id);
+    const csvFiles = files.filter(f => f.name.toLowerCase().endsWith(".csv"));
+    console.log(`[SCAN] ${csvFiles.length} CSV trouvés dans ${tracatemp.name}`);
+
+    for (const f of csvFiles) {
+      try {
+        const res = await fetch(
+          `https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`
+        );
+        if (!res.ok) continue;
+
+        const text = await res.text();
+        const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
+        if (lines.length < 2) continue;
+
+        const headers = lines[0].split(",").map(h => h.replace(/"/g, "").trim().toLowerCase());
+
+        // 🔍 2ème occurrence (comme ton ancien index)
+        let idxInf = headers.map((h,i)=>({h,i})).filter(o=>o.h.includes("sonde ac inf"))[1]?.i;
+        let idxSup = headers.map((h,i)=>({h,i})).filter(o=>o.h.includes("sonde ac sup"))[1]?.i;
+        if (idxInf === undefined && idxSup === undefined) continue;
+
+        let countFlame = 0;
+        for (let i = 1; i < lines.length; i++) {
+          const cols = lines[i].split(",").map(c => c.replace(/"/g, "").trim());
+
+          // 🕔 ignore la nuit (<5h)
+          const timeStr = cols[0];
+          if (timeStr && /^(\d{2}):(\d{2})/.test(timeStr)) {
+            const [_, hh] = timeStr.match(/^(\d{2}):/);
+            const hour = parseInt(hh, 10);
+            if (hour < 5) continue;
+          }
+
+          const vInf = idxInf !== undefined ? parseFloat(cols[idxInf]) : NaN;
+          const vSup = idxSup !== undefined ? parseFloat(cols[idxSup]) : NaN;
+
+if (
+    (isFinite(vInf) && vInf > 40 && vInf < 300) ||
+    (isFinite(vSup) && vSup > 40 && vSup < 300)
+) {
+    countFlame++;
+}
+
+        }
+
+        if (countFlame >= 1) {
+          const m = f.name.match(/(\d{8})\.csv$/i);
+          if (m) hotDays[m[1]] = true;
+        }
+
+      } catch (e) {
+        console.warn(`[SCAN] Erreur lecture fichier ${f.name}:`, e);
+      }
+    }
+
+console.log(`[SCAN] 🔥 ${Object.keys(hotDays).length} jours chauds détectés pour le site`);
+console.timeEnd(`[SCAN] Durée scanSiteHotDays (${siteId})`);
+localStorage.setItem(`hotDays_${siteId}`, JSON.stringify(hotDays));
+
+// ✅ Recharge les calendriers maintenant que hotDaysMap est prêt
+initDatePickers();
+
+return hotDays;
 
 
-
+  } catch (err) {
+    console.error("[SCAN] Erreur générale scanSiteHotDays:", err);
+    console.timeEnd(`[SCAN] Durée scanSiteHotDays (${siteId})`);
+    return hotDays;
+  }
+}
 
 
 function loadSiteHotDays(siteId) {
@@ -2963,9 +2750,7 @@ async function checkTraçaTempToday(parentLi, tracatempId) {
   if (!todayFile) return;
 
   try {
-const realId = getDriveFileId(todayFile);
-const url = `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(todayFile.name)}&t=${Date.now()}&site=Smes_Acces`;
-
+const url = `https://smes21540.netlify.app/.netlify/functions/drive?id=${todayFile.id}&name=${encodeURIComponent(todayFile.name)}&t=${Date.now()}&site=Smes_Acces`;
 
 const res = await fetch(url);
 
@@ -3260,11 +3045,9 @@ document.getElementById("exportExcelGazBtn").addEventListener("click", function 
 // === Calcule les valeurs GAZ pour une ligne
 // =========================================
 async function computeGazForRow({ f, tdAction, tr, tdDate }) {
-const realId = getDriveFileId(f);
-const res = await fetch(
-  `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`
-);
-
+  const res = await fetch(
+    `https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`
+  );
   if (!res.ok) throw new Error("Fetch CSV GAZ failed: " + res.status);
 
   const text = await res.text();
@@ -3536,41 +3319,39 @@ div.onclick = async () => {
   showSiteTiles();
 }
 
-async function renderSiteSubfolderTiles(siteId, siteName="", token=null) {
-  if (token !== null && token !== NAV_TOKEN) return;
-
+async function renderSiteSubfolderTiles(siteId, siteName="") {
   const tiles = document.getElementById("siteTiles");
   if (!tiles) return;
 
+  // charge la liste des dossiers du site
   const files = await fetchFolderContents(siteId);
-  if (token !== null && token !== NAV_TOKEN) return;
+const folders = (files || [])
+  .filter(isDriveFolderOrShortcutFolder)
 
-  const folders = (files || [])
-    .filter(isDriveFolderOrShortcutFolder)
     .sort((a,b) => a.name.localeCompare(b.name, 'fr', { sensitivity:'base' }));
 
   tiles.innerHTML = "";
 
-
   // Si pas de sous-dossiers -> afficher directement les fichiers du site
-if (!folders.length){
-  hideSiteTiles();
+  if (!folders.length){
+    hideSiteTiles();
 
-  localStorage.setItem('lastFolderId', siteId);
-  localStorage.setItem("lastFolderPath", siteName || "");
+    // mémorise le dossier courant comme "dernier dossier"
+    localStorage.setItem('lastFolderId', siteId);
+    localStorage.setItem("lastFolderPath", siteName || "");
 
-  const files2 = await fetchFolderContents(siteId);
-  if (token !== null && token !== NAV_TOKEN) return;
+    const files2 = await fetchFolderContents(siteId);
+    const filtered = (files2 || []).filter(x =>
+      /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(x.name)
+    );
 
-const filtered = (files2 || []).filter(isDisplayableFile);
+    // preview : inclure images + pdf + vidéos
+    previewFiles = filtered.filter(x =>
+      /\.(jpg|jpeg|png|gif|webp|pdf|mp4|webm|mov|m4v)$/i.test(x.name)
+    );
 
-previewFiles = filtered
-  .filter(isPreviewableFile)
-  .map(x => ({ ...x, _realId: getDriveFileId(x) }));
-
-displayFiles(filtered, siteName || "");
-return;
-
+    displayFiles(filtered, siteName || "");
+    return;
   }
 
 
@@ -3598,10 +3379,9 @@ applyFolderTooltip(div, f.name);
 
 
     
-div.onclick = async () => {
-  nextNavToken();   // invalide tout rendu en route
-  hideSiteTiles();
-
+    div.onclick = async () => {
+      // on quitte le mode tuiles
+      hideSiteTiles();
 
       // on essaye de retrouver le LI déjà créé par toggleFolder
 const realId = getDriveFolderId(f);
@@ -3619,10 +3399,7 @@ if (childLi) {
   const filtered = files2.filter(x =>
     /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(x.name)
   );
-  previewFiles = filtered
-  .filter(x => /\.(jpg|jpeg|png|gif|webp|pdf|mp4|webm|mov|m4v)$/i.test(x.name))
-  .map(x => ({ ...x, _realId: getDriveFileId(x) }));
-
+  previewFiles = filtered.filter(x => /\.(jpg|jpeg|pdf|mp4|gif|webm|mov|m4v)$/i.test(x.name));
   displayFiles(filtered, f.name);
 }
 
@@ -3630,29 +3407,25 @@ if (childLi) {
 
     tiles.appendChild(div);
   });
-if (token !== null && token !== NAV_TOKEN) return;
+
   showSiteTiles();
 }
 
 
 // Clique sur un site (tile ou sidebar) → ouvre l'arbre + affiche les sous-dossiers en tuiles
 async function openSiteAndShowTiles(siteId, siteName="") {
-  const myToken = nextNavToken(); // cette action devient la nav courante
-
+  // ✅ on affiche les contrôles pour que la box "Campagnes" puisse apparaître
   const controls = document.querySelector(".controls");
   if (controls) controls.style.display = "flex";
 
+  // ✅ charge les campagnes du site TOUT DE SUITE (avant même un dossier final)
   await refreshCampaignUIForSite(siteId);
-  if (myToken !== NAV_TOKEN) return;
 
   const li = document.querySelector(`#folderTree > li[data-id="${siteId}"]`);
-  if (li) await expandFolder(li);
-  if (myToken !== NAV_TOKEN) return;
+  if (li) await toggleFolder(li);     // ✅ charge/affiche les sous-dossiers dans la sidebar
 
-  await renderSiteSubfolderTiles(siteId, siteName, myToken);
+  await renderSiteSubfolderTiles(siteId, siteName);
 }
-
-
 
 
   
@@ -3675,38 +3448,12 @@ const last = localStorage.getItem("lastFolderId");
 if (last) {
   // attendre un peu que l'arborescence soit rendue
   setTimeout(() => {
-const chain = JSON.parse(localStorage.getItem("lastFolderIdChain") || "[]");
-if (chain.length) {
-  // on attend que la racine soit chargée
-  setTimeout(async () => {
-    // 1) ouvrir le site (chain[0])
-    const siteLi = document.querySelector(`#folderTree > li[data-id="${chain[0]}"]`);
-    if (!siteLi) return console.warn("[INIT] Site introuvable:", chain[0]);
-
-    await expandFolder(siteLi);
-
-    // 2) dérouler la chaîne
-    let currentLi = siteLi;
-    for (let i = 1; i < chain.length; i++) {
-      const id = chain[i];
-      // s'assurer que les enfants existent
-      await expandFolder(currentLi);
-      const nextLi = currentLi.querySelector(`li[data-id="${id}"]`);
-      if (!nextLi) {
-        console.warn("[INIT] Maillon introuvable dans la chaîne:", id);
-        return;
-      }
-      currentLi = nextLi;
+    const li = document.querySelector(`#folderTree li[data-id="${last}"]`);
+    if (li) {
+      loadFolderFilesOnClick(li);
+    } else {
+      console.warn("[INIT] Impossible de retrouver le dernier dossier ouvert :", last);
     }
-
-    // 3) ouvrir le dossier final
-    await loadFolderFilesOnClick(currentLi, null);
-    currentLi.scrollIntoView({ block: "center" });
-  }, 1200);
-} else {
-  console.warn("[INIT] Pas de chaîne d'IDs enregistrée");
-}
-
   }, 1200);
 }
 
@@ -3750,23 +3497,6 @@ function clearBrowserCache() {
 
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
