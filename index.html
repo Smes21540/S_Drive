@@ -1612,6 +1612,20 @@ console.log("[Folder] Chemin complet enregistré :", fullPath);
     console.log("[Z3] Cache vidé (hors Traça_Temp / Historique)");
   }
 
+
+const files = await fetchFolderContents(li.dataset.id);
+
+// ✅ sous-dossiers
+const subFolders = (files || []).filter(isDriveFolderOrShortcutFolder);
+
+// ✅ fichiers affichables
+const filtered = (files || []).filter(f =>
+  !isDriveFolderOrShortcutFolder(f) &&
+  /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(f.name)
+);
+
+
+  
   // Charger fichiers CSV/JPG classiques du dossier
 // ✅ Règle simple : tuiles uniquement si le dossier ne contient AUCUN fichier
 const hasFiles = filtered.length > 0;
@@ -1642,24 +1656,7 @@ previewFiles = filtered.filter(f => /\.(jpg|jpeg|pdf|mp4|gif|webm|mov|m4v)$/i.te
 displayFiles(filtered, nameSpan ? nameSpan.textContent : '');
 
 
-// ✅ si sous-dossiers => tuiles inline (tuiles + tableau)
-if (subFolders.length > 0) {
-  const tiles = document.getElementById("siteTiles");
-  if (tiles) {
-    tiles.classList.add("inline");
-    tiles.style.display = "grid";
-  }
 
-  // ✅ IMPORTANT: inline = on garde le tableau visible
-  showSiteTilesInline();
-
-  // ✅ on rend les tuiles à partir de la liste déjà connue (subFolders)
-  await renderInlineSubfolderTiles(li, subFolders, nameSpan?.textContent || "");
-} else {
-  // ✅ pas de sous-dossiers => on est sur un dossier final: tableau visible, pas de tuiles
-  hideSiteTiles();
-  showTable();
-}
 
 
 
@@ -3632,6 +3629,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
