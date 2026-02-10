@@ -1139,20 +1139,21 @@ if (!siteFolder) {
 // Maintenant on scanne les sous-dossiers du site
 const folders = await fetchFolderContents(siteFolder.id);
 
+// ✅ accepte folder OU shortcut folder
+const tracatemp = folders.find(f =>
+  isDriveFolderOrShortcutFolder(f) &&
+  (f.name.toLowerCase().includes("traça_temp") || f.name.toLowerCase().includes("traca_temp"))
+);
 
-        const tracatemp = folders.find(f =>
-            f.mimeType === "application/vnd.google-apps.folder" &&
-            f.name.toLowerCase().includes("traça_temp")
-        );
+if (!tracatemp) {
+  console.warn("❌ Dossier Traça_Temp introuvable !");
+  return 0;
+}
 
-        if (!tracatemp) {
-            console.warn("❌ Dossier Traça_Temp introuvable !");
-            return 0;
-        }
+// ✅ ID réel (si shortcut => targetId)
+const tracatempId = getDriveFolderId(tracatemp);
+const files = await fetchFolderContents(tracatempId);
 
-        console.log("✔ Dossier Traça_Temp trouvé :", tracatemp.name, tracatemp.id);
-
-        const files = await fetchFolderContents(tracatemp.id);
 
         const csvName = `SA00094_${dateStr.replace(/-/g, "")}.csv`;
 
@@ -1473,8 +1474,11 @@ for (const f of folders) {
       childLi.appendChild(span);
       ul.appendChild(childLi);
 
-      // ✅ Vérif Temp (flamme 🔥)
-      if (f.name.includes("Temp")) { checkTraçaTempToday(li, f.id); }
+// ✅ Vérif Temp (flamme 🔥) : ID réel (folder ou shortcut)
+if (f.name.includes("Temp")) { 
+  checkTraçaTempToday(li, getDriveFolderId(f)); 
+}
+
     }
 
     li.appendChild(ul);
@@ -2692,18 +2696,27 @@ async function scanSiteHotDays(siteId) {
   console.log(`[SCAN] Scan du site ${siteId} → dossier Traça_Temp`);
 
   try {
-    const siblings = await fetchFolderContents(siteId);
-    const tracatemp = siblings.find(s => 
-      s.mimeType === 'application/vnd.google-apps.folder' &&
-      (s.name.toLowerCase().includes("traça_temp") || s.name.toLowerCase().includes("traca_temp"))
-    );
+const siblings = await fetchFolderContents(siteId);
+
+// ✅ accepte folder OU shortcut folder
+const tracatemp = siblings.find(s =>
+  isDriveFolderOrShortcutFolder(s) &&
+  (s.name.toLowerCase().includes("traça_temp") || s.name.toLowerCase().includes("traca_temp"))
+);
+
 if (!tracatemp) {
-  console.warn(`[SCAN] Aucun dossier Traça_Temp trouvé pour le site ${siteId}`);
-  return hotDays;
+  console.warn(`[SCAN] Aucun Traça_Temp pour le site ${siteId}`);
+
+  // ✅ important: garder un cache propre et une UI stable
+  localStorage.setItem(`hotDays_${siteId}`, JSON.stringify({}));
+  initDatePickers(); // pour recolorer correctement même sans Traça_Temp
+  return {};
 }
 
+// ✅ ID réel (si shortcut => targetId)
+const tracatempId = getDriveFolderId(tracatemp);
+const files = await fetchFolderContents(tracatempId);
 
-    const files = await fetchFolderContents(tracatemp.id);
     const csvFiles = files.filter(f => f.name.toLowerCase().endsWith(".csv"));
     console.log(`[SCAN] ${csvFiles.length} CSV trouvés dans ${tracatemp.name}`);
 
@@ -3629,6 +3642,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
