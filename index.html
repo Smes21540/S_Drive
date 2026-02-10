@@ -1613,16 +1613,34 @@ console.log("[Folder] Chemin complet enregistré :", fullPath);
   }
 
   // Charger fichiers CSV/JPG classiques du dossier
-const files = await fetchFolderContents(li.dataset.id);
+// ✅ Règle simple : tuiles uniquement si le dossier ne contient AUCUN fichier
+const hasFiles = filtered.length > 0;
+const hasSubFolders = subFolders.length > 0;
 
-// ✅ sous-dossiers
-const subFolders = files.filter(isDriveFolderOrShortcutFolder);
+if (hasSubFolders && !hasFiles) {
+  // ➜ Dossier "menu" : tuiles plein écran, tableau caché
+  const tiles = document.getElementById("siteTiles");
+  if (tiles) {
+    tiles.classList.remove("inline");
+    tiles.style.display = "grid";
+  }
 
-// ✅ fichiers affichables
-const filtered = files.filter(f =>
-  !isDriveFolderOrShortcutFolder(f) &&
-  /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(f.name)
-);
+  hideTable();
+
+  // affiche les sous-dossiers en tuiles
+  await renderSiteSubfolderTiles(li.dataset.id, nameSpan?.textContent || "");
+
+  return; // ✅ IMPORTANT : on sort ici, pas de displayFiles
+}
+
+// ➜ Sinon (il y a des fichiers, ou pas de sous-dossier) : on affiche le tableau et basta
+hideSiteTiles();
+showTable();
+
+// preview + affichage tableau
+previewFiles = filtered.filter(f => /\.(jpg|jpeg|pdf|mp4|gif|webm|mov|m4v)$/i.test(f.name));
+displayFiles(filtered, nameSpan ? nameSpan.textContent : '');
+
 
 // ✅ si sous-dossiers => tuiles inline (tuiles + tableau)
 if (subFolders.length > 0) {
@@ -3614,6 +3632,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
