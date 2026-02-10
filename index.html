@@ -932,7 +932,10 @@ const FLAME_THRESHOLD = 40.0;   // seuil déclencheur de la flamme 🔥
 let previewFiles = [], currentPreviewIndex = 0;
 let filterStartDate="", filterEndDate="";
 let themeMenuTimer;
-let cancelScan = false; // 🛑 permet d’arrêter le scan si on clique ailleurs
+let cancelScan = false;
+
+let isUserNavigating = false;   // 🔒 verrou navigation utilisateur
+
 
 function isDriveFolderOrShortcutFolder(f){
   return (
@@ -1541,6 +1544,12 @@ async function fetchChildren(folderId){
   
 async function loadFolderFilesOnClick(li, event){
 
+  isUserNavigating = true;   // 🔒 début navigation utilisateur
+
+  try {
+
+
+
   // ✅ 1) Si li est absent (appel auto / refresh / filtre), on tente de le retrouver
   if (!li) {
     const lastId = localStorage.getItem("lastFolderId");
@@ -1692,7 +1701,13 @@ if (!hasRealFiles && subFolders.length > 0) {
   return;
 }
 
+    displayFiles(filtered, folderName);
 
+  } finally {
+
+    isUserNavigating = false;   // 🔓 TOUJOURS exécuté
+  }
+}
 
   
 const filtered = files.filter(f =>
@@ -2756,6 +2771,9 @@ let currentSiteId = null;
 let hotDaysMap = {}; // { 'YYYYMMDD': true }
 
 async function scanSiteHotDays(siteId) {
+
+  if (isUserNavigating) return {};   // 🚫 scan passif
+
   const hotDays = {};
   console.time(`[SCAN] Durée scanSiteHotDays (${siteId})`);
   console.log(`[SCAN] Scan du site ${siteId} → dossier Traça_Temp`);
@@ -2872,6 +2890,18 @@ function clearSiteHotDays() {
 
 /* ----------- 🔥 Vérif CSV du jour pour "Temp" ----------- */
 async function checkTraçaTempToday(parentLi, tracatempId) {
+
+  if (isUserNavigating) return;   // 🚫 bloque le scan pendant navigation
+
+
+  // 🚫 ne jamais agir si on n’est pas dans Traça_Temp
+  const activePath = localStorage.getItem("lastFolderPath") || "";
+  if (!activePath.toLowerCase().includes("traça_temp") &&
+      !activePath.toLowerCase().includes("traca_temp")) {
+    return;
+  }
+
+  
   const today = new Date();
   const yyyymmdd =
     today.getFullYear().toString() +
@@ -3637,6 +3667,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
