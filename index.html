@@ -1694,15 +1694,21 @@ const filtered = (files || []).filter(f =>
 // ✅ sous-dossiers
 const subFolders = (files || []).filter(isDriveFolderOrShortcutFolder);
 
-// ✅ vrai contenu (hors dossiers)
-const hasRealFiles = filtered.length > 0;
+// fichiers réellement affichables (hors json techniques)
+const displayableFiles = filtered.filter(f =>
+  !f.name.toLowerCase().endsWith(".json")
+);
 
-// ✅ mode tuiles uniquement si AUCUN fichier réel
-if (!hasRealFiles && subFolders.length > 0) {
+// ⚠️ on passe en tuiles UNIQUEMENT s’il n’y a RIEN à afficher
+if (displayableFiles.length === 0 && subFolders.length > 0) {
   const folderName = li.querySelector(".folder-name")?.textContent?.trim() || "";
   await renderSiteSubfolderTiles(li.dataset.id, folderName);
   return;
 }
+
+// ✅ sinon on affiche normalement (PDF inclus)
+displayFiles(filtered, folderName);
+
 
 // ✅ affichage normal
 displayFiles(filtered, folderName);
@@ -3670,6 +3676,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
