@@ -1337,6 +1337,11 @@ async function fetchFolderContents(folderId){
   }
 }
 
+// Fonction utilitaire pour récupérer les sous-dossiers sans modifier l'affichage
+async function fetchChildren(folderId){
+  const files = await fetchFolderContents(folderId);
+  return files.filter(isDriveFolderOrShortcutFolder);
+}
 
 
 
@@ -1528,15 +1533,10 @@ for (const f of folders) {
     li.dataset.loading = "false";
   }
 
-
-
-
-// Fonction utilitaire pour récupérer les sous-dossiers sans modifier l'affichage
-async function fetchChildren(folderId){
-  const files = await fetchFolderContents(folderId);
-  return files.filter(isDriveFolderOrShortcutFolder);
-
 }
+
+
+
 
 
 
@@ -3667,6 +3667,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
