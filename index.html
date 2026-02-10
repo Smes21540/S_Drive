@@ -1684,24 +1684,29 @@ const z3Files = histFiles.filter(ff =>
 
 
   // Charger fichiers CSV/JPG classiques du dossier
-  const files = await fetchFolderContents(li.dataset.id);
+const files = await fetchFolderContents(li.dataset.id);
 
-const subFolders = (files || []).filter(isDriveFolderOrShortcutFolder);
-const visibleFiles = (files || []).filter(f =>
+// ✅ fichiers visibles (UNE SEULE FOIS)
+const filtered = (files || []).filter(f =>
   /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(f.name)
 );
 
-const hasRealFiles = files.some(f =>
-  !isDriveFolderOrShortcutFolder(f)
-);
+// ✅ sous-dossiers
+const subFolders = (files || []).filter(isDriveFolderOrShortcutFolder);
 
+// ✅ vrai contenu (hors dossiers)
+const hasRealFiles = filtered.length > 0;
+
+// ✅ mode tuiles uniquement si AUCUN fichier réel
 if (!hasRealFiles && subFolders.length > 0) {
   const folderName = li.querySelector(".folder-name")?.textContent?.trim() || "";
   await renderSiteSubfolderTiles(li.dataset.id, folderName);
   return;
 }
 
-    displayFiles(filtered, folderName);
+// ✅ affichage normal
+displayFiles(filtered, folderName);
+
 
   } finally {
 
@@ -1710,9 +1715,7 @@ if (!hasRealFiles && subFolders.length > 0) {
 
 
   
-const filtered = files.filter(f =>
-  /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(f.name)
-);
+
 
 
 
@@ -3667,6 +3670,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
