@@ -1823,6 +1823,7 @@ if (siteId && siteId !== currentSiteId) {
 // 🔥 Lancer le scan en arrière-plan sans bloquer l'affichage
 scanSiteHotDays(siteId).then(map => {
   hotDaysMap = map;
+  initDatePickers(); // ✅ ICI, et seulement ici
   console.log(`[CACHE] 🔥 ${Object.keys(hotDaysMap).length} jours chauds détectés et chargés pour ${siteRootLi?.querySelector(".folder-name")?.textContent}`);
 
 
@@ -2852,10 +2853,12 @@ const siblings = await fetchFolderContents(siteId);
 
 const tracatemp = siblings.find(s =>
   isDriveFolderOrShortcutFolder(s) &&
-  (s.name || "").toLowerCase().includes("traça_temp") ||
-  isDriveFolderOrShortcutFolder(s) &&
-  (s.name || "").toLowerCase().includes("traca_temp")
+  (
+    (s.name || "").toLowerCase().includes("traça_temp") ||
+    (s.name || "").toLowerCase().includes("traca_temp")
+  )
 );
+
 
 if (!tracatemp) {
   console.warn(`[SCAN] Aucun dossier Traça_Temp trouvé pour le site ${siteId}`);
@@ -2926,10 +2929,8 @@ console.log(`[SCAN] 🔥 ${Object.keys(hotDays).length} jours chauds détectés 
 console.timeEnd(`[SCAN] Durée scanSiteHotDays (${siteId})`);
 localStorage.setItem(`hotDays_${siteId}`, JSON.stringify(hotDays));
 
-// ✅ Recharge les calendriers maintenant que hotDaysMap est prêt
-initDatePickers();
+return hotDays; // ⛔️ on NE touche PLUS aux datepickers ici
 
-return hotDays;
 
 
   } catch (err) {
@@ -3732,6 +3733,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
