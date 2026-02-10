@@ -2110,19 +2110,34 @@ const tdFolder=document.createElement('td'); tdFolder.textContent=folderName;
 if (f.name.toLowerCase().endsWith('.csv')) {
 
   html += `<a href="https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&download=1&site=Smes_Acces" target="_blank">
-            <button class="action-btn">Télécharger</button>
+            <button class="action-btn" title="Télécharger le fichier">Télécharger</button>
           </a>`;
 
-  html += `<button class="action-btn" onclick="openViewer('viewer.html','${realId}','${f.name}')">Tableau</button>`;
+  html += `<button class="action-btn"
+        title="Afficher les données en tableau"
+        onclick="openViewer('viewer.html','${realId}','${f.name}')">
+  Tableau
+</button>
+`;
 
   // 👇 bouton Courbes seulement si on n'est PAS dans Historique
   if (!folderName.toLowerCase().includes("historique")) {
-    html += `<button class="action-btn" onclick="openViewer('viewer02.html','${realId}','${f.name}')">Courbes</button>`;
+    html += `<button class="action-btn"
+        title="Afficher les courbes des valeurs"
+        onclick="openViewer('viewer02.html','${realId}','${f.name}')">
+  Courbes
+</button>
+`;
   }
 
   // 👇 bouton Sondes uniquement si on est dans Traça_Temp
   if (folderName.toLowerCase().includes("traça_temp") || folderName.toLowerCase().includes("traca_temp")) {
-    html += `<button class="action-btn" onclick="openViewer('index03.html','${realId}','${f.name}')">Sondes</button>`;
+    html += `<button class="action-btn"
+        title="Visualiser les températures des sondes et les autres valeurs sur le plan du séchoir à un moment précis sur une sidebar"
+        onclick="openViewer('index03.html','${realId}','${f.name}')">
+  Sondes
+</button>
+`;
   }
 }
 
@@ -3618,3 +3633,4 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
