@@ -964,6 +964,97 @@ function getDriveFileId(f){
   return f?.id; // ✅ fichier normal
 }
 
+
+function isDisplayableFile(f){
+  if (!f) return false;
+  if (isDriveFolderOrShortcutFolder(f)) return false;
+
+  const name = (f.name || "").toLowerCase();
+  const mt   = (f.mimeType || "").toLowerCase();
+  const tmt  = (f.shortcutDetails?.targetMimeType || "").toLowerCase();
+
+  // 1) Extension (ton filtre actuel)
+  const byExt = /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(name);
+
+  // 2) MimeType (PDF sans extension, etc.)
+  const byMime =
+    mt === "application/pdf" ||
+    mt.startsWith("image/") ||
+    mt.startsWith("video/") ||
+    mt === "text/csv" ||
+    mt === "application/json" ||
+    mt === "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
+    mt === "application/vnd.ms-powerpoint";
+
+  // 3) Shortcut -> targetMimeType
+  const byTarget =
+    tmt === "application/pdf" ||
+    tmt.startsWith("image/") ||
+    tmt.startsWith("video/") ||
+    tmt === "text/csv" ||
+    tmt === "application/json" ||
+    tmt === "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
+    tmt === "application/vnd.ms-powerpoint";
+
+  return byExt || byMime || byTarget;
+}
+
+function isPreviewableFile(f){
+  if (!f) return false;
+  const name = (f.name || "").toLowerCase();
+  const mt   = (f.mimeType || "").toLowerCase();
+  const tmt  = (f.shortcutDetails?.targetMimeType || "").toLowerCase();
+
+  const byExt = /\.(jpg|jpeg|png|gif|webp|pdf|mp4|webm|mov|m4v)$/i.test(name);
+  const byMime = mt === "application/pdf" || mt.startsWith("image/") || mt.startsWith("video/");
+  const byTarget = tmt === "application/pdf" || tmt.startsWith("image/") || tmt.startsWith("video/");
+
+  return byExt || byMime || byTarget;
+}
+
+function isPdfFile(f){
+  const name = (f?.name || "").toLowerCase();
+  const mt   = (f?.mimeType || "").toLowerCase();
+  const tmt  = (f?.shortcutDetails?.targetMimeType || "").toLowerCase();
+  return name.endsWith(".pdf") || mt === "application/pdf" || tmt === "application/pdf";
+}
+
+function isPptFile(f){
+  const name = (f?.name || "").toLowerCase();
+  const mt   = (f?.mimeType || "").toLowerCase();
+  const tmt  = (f?.shortcutDetails?.targetMimeType || "").toLowerCase();
+  return (
+    /\.(ppsx|pptx)$/i.test(name) ||
+    mt === "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
+    mt === "application/vnd.ms-powerpoint" ||
+    tmt === "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
+    tmt === "application/vnd.ms-powerpoint"
+  );
+}
+
+function isImageFile(f){
+  const name = (f?.name || "").toLowerCase();
+  const mt   = (f?.mimeType || "").toLowerCase();
+  const tmt  = (f?.shortcutDetails?.targetMimeType || "").toLowerCase();
+  return (
+    /\.(jpg|jpeg|png|gif|webp)$/i.test(name) ||
+    mt.startsWith("image/") ||
+    tmt.startsWith("image/")
+  );
+}
+
+function isVideoFile(f){
+  const name = (f?.name || "").toLowerCase();
+  const mt   = (f?.mimeType || "").toLowerCase();
+  const tmt  = (f?.shortcutDetails?.targetMimeType || "").toLowerCase();
+  return (
+    /\.(mp4|webm|mov|m4v)$/i.test(name) ||
+    mt.startsWith("video/") ||
+    tmt.startsWith("video/")
+  );
+}
+
+
   
 
 /* ===========================
@@ -1689,23 +1780,20 @@ if (folderNameLower.includes("traça_temp") || folderNameLower.includes("traca_t
   const files = await fetchFolderContents(li.dataset.id);
 
 const subFolders = (files || []).filter(isDriveFolderOrShortcutFolder);
-const visibleFiles = (files || []).filter(f =>
-  /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(f.name)
-);
+
+// ✅ extension OU mimeType OU shortcut.targetMimeType
+const visibleFiles = (files || []).filter(isDisplayableFile);
 
 // ✅ si pas de fichiers mais des sous-dossiers -> mode tuiles sur ce dossier
 if (visibleFiles.length === 0 && subFolders.length > 0) {
-  // prépare les tuiles pour ce niveau
   const folderName = li.querySelector(".folder-name")?.textContent?.trim() || "";
   await renderSiteSubfolderTiles(li.dataset.id, folderName);
   return;
 }
 
+// ✅ la liste affichée = fichiers affichables
+const filtered = (files || []).filter(isDisplayableFile);
 
-  
-const filtered = files.filter(f =>
-  /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(f.name)
-);
 
 
 
@@ -1783,8 +1871,9 @@ scanSiteHotDays(siteId).then(map => {
 }
 
 previewFiles = filtered
-  .filter(f => /\.(jpg|jpeg|png|gif|webp|pdf|mp4|webm|mov|m4v)$/i.test(f.name))
+  .filter(isPreviewableFile)
   .map(f => ({ ...f, _realId: getDriveFileId(f) }));
+
 
 
 displayFiles(filtered, nameSpan ? nameSpan.textContent : '');
@@ -2177,7 +2266,8 @@ if (
 
 
 
-if (/\.(jpg|jpeg|png|gif|webp)$/i.test(f.name)) {
+if (isImageFile(f)) {
+
 
   html += `<img src="https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&site=Smes_Acces"
     onclick="openModal('${realId}')"
@@ -2191,7 +2281,8 @@ if (/\.(jpg|jpeg|png|gif|webp)$/i.test(f.name)) {
 
 
 /* ✅ VIDEO (MP4/WEBM/MOV/M4V) */
-if (/\.(mp4|webm|mov|m4v)$/i.test(f.name)) {
+if (isVideoFile(f)) {
+
   html += `
     <button class="action-btn" onclick="openModal('${realId}')">Ouvrir</button>
     <a href="https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&download=1&site=Smes_Acces" target="_blank">
@@ -2204,7 +2295,8 @@ if (/\.(mp4|webm|mov|m4v)$/i.test(f.name)) {
 
 
 // === PDF ===
-if (f.name.toLowerCase().endsWith(".pdf")) {
+if (isPdfFile(f)) {
+
   html += `
     <a href="https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&download=1&site=Smes_Acces" target="_blank">
       <button class="action-btn">Télécharger</button>
@@ -2215,7 +2307,8 @@ if (f.name.toLowerCase().endsWith(".pdf")) {
 
 
 // === PowerPoint (ppsx/pptx) ===
-if (/\.(ppsx|pptx)$/i.test(f.name)) {
+if (isPptFile(f)) {
+
   const baseUrl = `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`;
 
   html += `
@@ -2444,9 +2537,10 @@ function openModal(id) {
     `https://smes21540.netlify.app/.netlify/functions/drive` +
     `?id=${realId}&name=${encodeURIComponent(file.name)}&site=Smes_Acces`;
 
-  const isVideo = /\.(mp4|webm|mov|m4v)$/i.test(file.name);
-  const isPdf   = /\.pdf$/i.test(file.name);
-  const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(file.name);
+const isVideo = isVideoFile(file);
+const isPdf   = isPdfFile(file);
+const isImage = isImageFile(file);
+
 
   // Reset
   frame.style.display = "none"; frame.src = "";
@@ -3476,18 +3570,15 @@ if (!folders.length){
   const files2 = await fetchFolderContents(siteId);
   if (token !== null && token !== NAV_TOKEN) return;
 
-  const filtered = (files2 || []).filter(x =>
-    /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(x.name)
-  );
+const filtered = (files2 || []).filter(isDisplayableFile);
 
+previewFiles = filtered
+  .filter(isPreviewableFile)
+  .map(x => ({ ...x, _realId: getDriveFileId(x) }));
 
-    // preview : inclure images + pdf + vidéos
-    previewFiles = filtered.filter(x =>
-      /\.(jpg|jpeg|png|gif|webp|pdf|mp4|webm|mov|m4v)$/i.test(x.name)
-    );
+displayFiles(filtered, siteName || "");
+return;
 
-    displayFiles(filtered, siteName || "");
-    return;
   }
 
 
@@ -3641,6 +3732,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
