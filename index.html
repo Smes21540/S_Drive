@@ -725,20 +725,6 @@ body[data-theme="orange"] #smes-footer-bg {
   word-break: break-word;
 }
 
-/* ✅ Mode inline : tuiles dans le flux normal (pas centrées en absolute) */
-.site-tiles.inline {
-  position: static !important;
-  left: auto !important;
-  top: auto !important;
-  transform: none !important;
-
-  width: 100% !important;
-  max-height: 260px;     /* ajuste si tu veux */
-  overflow: auto;
-
-  margin: 0 0 12px 0;
-  padding: 8px;
-}
 
 
   
@@ -942,29 +928,7 @@ let filterStartDate="", filterEndDate="";
 let themeMenuTimer;
 let cancelScan = false; // 🛑 permet d’arrêter le scan si on clique ailleurs
 
-function isDriveFolderOrShortcutFolder(f){
-  return (
-    f?.mimeType === "application/vnd.google-apps.folder" ||
-    (f?.mimeType === "application/vnd.google-apps.shortcut" &&
-     f?.shortcutDetails?.targetMimeType === "application/vnd.google-apps.folder")
-  );
-}
 
-function getDriveFolderId(f){
-  if (f?.mimeType === "application/vnd.google-apps.shortcut" && f?.shortcutDetails?.targetId) {
-    return f.shortcutDetails.targetId; // ✅ ID du dossier cible
-  }
-  return f?.id; // ✅ dossier normal
-}
-
-function getDriveFileId(f){
-  if (f?.mimeType === "application/vnd.google-apps.shortcut" && f?.shortcutDetails?.targetId) {
-    return f.shortcutDetails.targetId; // ✅ fichier cible
-  }
-  return f?.id; // ✅ fichier normal
-}
-
-  
 
 /* ===========================
    === Campagnes (2024/2025...)
@@ -1010,11 +974,9 @@ async function loadCampaignFilesForSite(siteId){
 
 
     try{
-const realId = getDriveFileId(f);
-const res = await fetch(
-  `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`
-);
-
+      const res = await fetch(
+        `https://smes21540.netlify.app/.netlify/functions/drive?id=${f.id}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`
+      );
       if(!res.ok) return;
 
       const text = await res.text();
@@ -1139,21 +1101,20 @@ if (!siteFolder) {
 // Maintenant on scanne les sous-dossiers du site
 const folders = await fetchFolderContents(siteFolder.id);
 
-// ✅ accepte folder OU shortcut folder
-const tracatemp = folders.find(f =>
-  isDriveFolderOrShortcutFolder(f) &&
-  (f.name.toLowerCase().includes("traça_temp") || f.name.toLowerCase().includes("traca_temp"))
-);
 
-if (!tracatemp) {
-  console.warn("❌ Dossier Traça_Temp introuvable !");
-  return 0;
-}
+        const tracatemp = folders.find(f =>
+            f.mimeType === "application/vnd.google-apps.folder" &&
+            f.name.toLowerCase().includes("traça_temp")
+        );
 
-// ✅ ID réel (si shortcut => targetId)
-const tracatempId = getDriveFolderId(tracatemp);
-const files = await fetchFolderContents(tracatempId);
+        if (!tracatemp) {
+            console.warn("❌ Dossier Traça_Temp introuvable !");
+            return 0;
+        }
 
+        console.log("✔ Dossier Traça_Temp trouvé :", tracatemp.name, tracatemp.id);
+
+        const files = await fetchFolderContents(tracatemp.id);
 
         const csvName = `SA00094_${dateStr.replace(/-/g, "")}.csv`;
 
@@ -1355,9 +1316,8 @@ activeCampaignKey = "";
 
 // ✅ Liste dossiers racine
 const rootFolders = files
-  .filter(isDriveFolderOrShortcutFolder)
+  .filter(f => f.mimeType === 'application/vnd.google-apps.folder')
   .sort((a,b) => a.name.localeCompare(b.name, 'fr', { sensitivity:'base' }));
-
 
 // ✅ Remplit les tuiles à droite (uniquement si non vide)
 renderRootTiles(rootFolders);
@@ -1365,9 +1325,7 @@ renderRootTiles(rootFolders);
 // ✅ Remplit la sidebar comme avant
 rootFolders.forEach(f => {
   const li = document.createElement('li');
-  li.dataset.id = getDriveFolderId(f);
-
-
+  li.dataset.id = f.id;
 
   const toggle = document.createElement('span');
   toggle.className = 'folder-toggle';
@@ -1446,13 +1404,13 @@ async function toggleFolder(li, event){
     const files = await fetchFolderContents(li.dataset.id);
     const ul = document.createElement('ul');
 
-const folders = files
-  .filter(isDriveFolderOrShortcutFolder)
-  .sort((a,b) => a.name.localeCompare(b.name, 'fr', { sensitivity:'base' }));
+    const folders = files
+      .filter(f => f.mimeType === 'application/vnd.google-apps.folder')
+      .sort((a,b) => a.name.localeCompare(b.name, 'fr', { sensitivity:'base' }));
 
-for (const f of folders) {
-  const childLi = document.createElement('li');
-  childLi.dataset.id = getDriveFolderId(f);
+    for (const f of folders) {
+      const childLi = document.createElement('li');
+      childLi.dataset.id = f.id;
 
       const childToggle = document.createElement('span');
       childToggle.className = 'folder-toggle';
@@ -1474,11 +1432,8 @@ for (const f of folders) {
       childLi.appendChild(span);
       ul.appendChild(childLi);
 
-// ✅ Vérif Temp (flamme 🔥) : ID réel (folder ou shortcut)
-if (f.name.includes("Temp")) { 
-  checkTraçaTempToday(li, getDriveFolderId(f)); 
-}
-
+      // ✅ Vérif Temp (flamme 🔥)
+      if (f.name.includes("Temp")) { checkTraçaTempToday(li, f.id); }
     }
 
     li.appendChild(ul);
@@ -1495,39 +1450,10 @@ if (f.name.includes("Temp")) {
 // Fonction utilitaire pour récupérer les sous-dossiers sans modifier l'affichage
 async function fetchChildren(folderId){
   const files = await fetchFolderContents(folderId);
-  return files.filter(isDriveFolderOrShortcutFolder);
-
+  return files.filter(f => f.mimeType === 'application/vnd.google-apps.folder');
 }
 
-
-
-
-  
 async function loadFolderFilesOnClick(li, event){
-
-  // ✅ 1) Si li est absent (appel auto / refresh / filtre), on tente de le retrouver
-  if (!li) {
-    const lastId = localStorage.getItem("lastFolderId");
-    if (lastId) {
-      li = document.querySelector(`#folderTree li[data-id="${lastId}"]`);
-    }
-  }
-
-  // ✅ 2) Si toujours rien, on sort proprement (plus de ReferenceError)
-  if (!li) {
-    console.warn("[loadFolderFilesOnClick] appelé sans li valide");
-    return;
-  }
-
-  // ✅ 3) Sécurité bonus : si li n’a pas dataset.id, on tente de le reconstruire
-  if (!li.dataset || !li.dataset.id) {
-    const lastId = localStorage.getItem("lastFolderId");
-    if (lastId) {
-      const fallback = document.querySelector(`#folderTree li[data-id="${lastId}"]`);
-      if (fallback) li = fallback;
-    }
-  }
-
   // reset des notes
   storedNotes = {};
   if (typeof jsonDates !== "undefined") jsonDates.clear?.();
@@ -1535,26 +1461,22 @@ async function loadFolderFilesOnClick(li, event){
 
   await toggleFolder(li);
 
-  // 🔄 Réinitialiser la sélection visuelle
-  document.querySelectorAll('#folderTree li span.folder-name')
-    .forEach(s => s.classList.remove('active-folder'));
+// 🔄 Réinitialiser la sélection visuelle
+document.querySelectorAll('#folderTree li span.folder-name').forEach(s => s.classList.remove('active-folder'));
 
-  // ✅ Surligne le dossier cliqué
-  const nameSpan = li.querySelector('span.folder-name');
-  if (nameSpan) nameSpan.classList.add('active-folder');
+// ✅ Surligne le dossier cliqué
+const nameSpan = li.querySelector('span.folder-name');
+if (nameSpan) nameSpan.classList.add('active-folder');
 
-  // ✅ Surligne aussi tous les parents (chemin hiérarchique)
-  let parentLi = li.parentElement.closest('li');
-  while (parentLi) {
-    const parentSpan = parentLi.querySelector('span.folder-name');
-    if (parentSpan) parentSpan.classList.add('active-folder');
-    parentLi = parentLi.parentElement.closest('li');
-  }
+// ✅ Surligne aussi tous les parents (chemin hiérarchique)
+let parentLi = li.parentElement.closest('li');
+while (parentLi) {
+  const parentSpan = parentLi.querySelector('span.folder-name');
+  if (parentSpan) parentSpan.classList.add('active-folder');
+  parentLi = parentLi.parentElement.closest('li');
+}
 
-  // ✅ Ne set le lastFolderId que si on peut
-  if (li.dataset?.id) {
-    localStorage.setItem('lastFolderId', li.dataset.id);
-  }
+  localStorage.setItem('lastFolderId', li.dataset.id);
 
 // 📂 Sauvegarde du chemin complet (ex: Voreppe/Traça_Temp)
 function buildFullFolderPath(li) {
@@ -1616,53 +1538,11 @@ console.log("[Folder] Chemin complet enregistré :", fullPath);
     console.log("[Z3] Cache vidé (hors Traça_Temp / Historique)");
   }
 
-
-const files = await fetchFolderContents(li.dataset.id);
-
-// ✅ sous-dossiers
-const subFolders = (files || []).filter(isDriveFolderOrShortcutFolder);
-
-// ✅ fichiers affichables
-const filtered = (files || []).filter(f =>
-  !isDriveFolderOrShortcutFolder(f) &&
+  // Charger fichiers CSV/JPG classiques du dossier
+  const files = await fetchFolderContents(li.dataset.id);
+const filtered = files.filter(f =>
   /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(f.name)
 );
-
-
-  
-  // Charger fichiers CSV/JPG classiques du dossier
-// ✅ Règle simple : tuiles uniquement si le dossier ne contient AUCUN fichier
-const hasFiles = filtered.length > 0;
-const hasSubFolders = subFolders.length > 0;
-
-if (hasSubFolders && !hasFiles) {
-  // ➜ Dossier "menu" : tuiles plein écran, tableau caché
-  const tiles = document.getElementById("siteTiles");
-  if (tiles) {
-    tiles.classList.remove("inline");
-    tiles.style.display = "grid";
-  }
-
-  hideTable();
-
-  // affiche les sous-dossiers en tuiles
-  await renderSiteSubfolderTiles(li.dataset.id, nameSpan?.textContent || "");
-
-  return; // ✅ IMPORTANT : on sort ici, pas de displayFiles
-}
-
-// ➜ Sinon (il y a des fichiers, ou pas de sous-dossier) : on affiche le tableau et basta
-hideSiteTiles();
-showTable();
-
-// preview + affichage tableau
-previewFiles = filtered.filter(f => /\.(jpg|jpeg|pdf|mp4|gif|webm|mov|m4v)$/i.test(f.name));
-displayFiles(filtered, nameSpan ? nameSpan.textContent : '');
-
-
-
-
-
 
 
 
@@ -1725,15 +1605,13 @@ document.querySelectorAll('#csvTable tbody tr').forEach(tr => {
 } else if (siteId && Object.keys(hotDaysMap).length === 0) {
   hotDaysMap = loadSiteHotDays(siteId);
   if (Object.keys(hotDaysMap).length === 0) {
-    console.log(`[CACHE] Aucun cache trouvé pour ${li?.querySelector(".folder-name")?.textContent}, relance du scan...`);
-
-scanSiteHotDays(siteId).then(map => {
-  hotDaysMap = map;
-  console.log(`[CACHE] 🔥 ${Object.keys(hotDaysMap).length} jours chauds détectés et chargés pour ${siteRootLi?.querySelector(".folder-name")?.textContent}`);
-  const active = document.querySelector('#folderTree .active-folder');
-  if (active) active.click();
-});
-
+    console.log(`[CACHE] Aucun cache trouvé pour ${siteLi.querySelector(".folder-name")?.textContent}, relance du scan...`);
+    scanSiteHotDays(siteId).then(map => {
+      hotDaysMap = map;
+      console.log(`[CACHE] 🔥 ${Object.keys(hotDaysMap).length} jours chauds détectés et chargés pour ${siteLi.querySelector(".folder-name")?.textContent}`);
+      const active = document.querySelector('#folderTree .active-folder');
+      if (active) active.click();
+    });
   } else {
     console.log(`[CACHE] ${Object.keys(hotDaysMap).length} jours chauds chargés depuis cache`);
   }
@@ -1762,13 +1640,11 @@ if (Object.keys(hotDaysMap).length > 0) {
 }
 
 async function displayFiles(files, folderName){
-const tiles = document.getElementById("siteTiles");
-if (tiles && !tiles.classList.contains("inline")) {
+
   hideSiteTiles();
-}
 
-const tbody = document.querySelector('#csvTable tbody');
 
+  const tbody=document.querySelector('#csvTable tbody');
   const downloadBtn=document.getElementById('downloadFolderBtn');
   tbody.innerHTML='';
 
@@ -2696,27 +2572,18 @@ async function scanSiteHotDays(siteId) {
   console.log(`[SCAN] Scan du site ${siteId} → dossier Traça_Temp`);
 
   try {
-const siblings = await fetchFolderContents(siteId);
-
-// ✅ accepte folder OU shortcut folder
-const tracatemp = siblings.find(s =>
-  isDriveFolderOrShortcutFolder(s) &&
-  (s.name.toLowerCase().includes("traça_temp") || s.name.toLowerCase().includes("traca_temp"))
-);
-
+    const siblings = await fetchFolderContents(siteId);
+    const tracatemp = siblings.find(s => 
+      s.mimeType === 'application/vnd.google-apps.folder' &&
+      (s.name.toLowerCase().includes("traça_temp") || s.name.toLowerCase().includes("traca_temp"))
+    );
 if (!tracatemp) {
-  console.warn(`[SCAN] Aucun Traça_Temp pour le site ${siteId}`);
-
-  // ✅ important: garder un cache propre et une UI stable
-  localStorage.setItem(`hotDays_${siteId}`, JSON.stringify({}));
-  initDatePickers(); // pour recolorer correctement même sans Traça_Temp
-  return {};
+  console.warn(`[SCAN] Aucun dossier Traça_Temp trouvé pour le site ${siteId}`);
+  return hotDays;
 }
 
-// ✅ ID réel (si shortcut => targetId)
-const tracatempId = getDriveFolderId(tracatemp);
-const files = await fetchFolderContents(tracatempId);
 
+    const files = await fetchFolderContents(tracatemp.id);
     const csvFiles = files.filter(f => f.name.toLowerCase().endsWith(".csv"));
     console.log(`[SCAN] ${csvFiles.length} CSV trouvés dans ${tracatemp.name}`);
 
@@ -3332,32 +3199,17 @@ function hideTable(){
   if (tw) tw.style.display = "none";
 }
 
-// ✅ Plein écran = tuiles seules (comportement actuel à la racine / choix site)
-function showSiteTilesFull(){
+function showSiteTiles(){
   const tiles = document.getElementById("siteTiles");
-  if (tiles){
-    tiles.classList.remove("inline");
-    tiles.style.display = "grid";
-  }
-  hideTable();
+  if (tiles) tiles.style.display = "grid";
+  hideTable(); // ✅ cache le tableau → plus de colonnes vides visibles
 }
 
-// ✅ Inline = tuiles + tableau (quand il y a des sous-dossiers ET des fichiers)
-function showSiteTilesInline(){
-  const tiles = document.getElementById("siteTiles");
-  if (tiles){
-    tiles.classList.add("inline");
-    tiles.style.display = "grid";
-  }
-  showTable();
-}
-
-// ✅ Cacher uniquement les tuiles (ne touche pas au tableau)
 function hideSiteTiles(){
   const tiles = document.getElementById("siteTiles");
   if (tiles) tiles.style.display = "none";
+  showTable(); // ✅ on remet le tableau dès qu'on sort des tuiles
 }
-
 
 
 function renderRootTiles(folders){
@@ -3384,10 +3236,11 @@ div.innerHTML = `
 
 
 div.onclick = async () => {
-  const realId = getDriveFolderId(f); // ✅ ID réel (dossier cible si shortcut)
-  await openSiteAndShowTiles(realId, f.name);
+  // ✅ choisir un site → afficher ses dossiers en tuiles
+  await openSiteAndShowTiles(f.id, f.name);
 
-  const li = document.querySelector(`#folderTree > li[data-id="${realId}"]`);
+  // option: surlignage du site dans la sidebar
+  const li = document.querySelector(`#folderTree > li[data-id="${f.id}"]`);
   if (li) {
     document.querySelectorAll('#folderTree li span.folder-name')
       .forEach(s => s.classList.remove('active-folder'));
@@ -3398,106 +3251,29 @@ div.onclick = async () => {
 };
 
 
-
     tiles.appendChild(div);
   });
 
-  showSiteTilesFull();
+  showSiteTiles();
 }
 
-async function renderInlineSubfolderTiles(parentLi, folders, parentName="") {
-  const tiles = document.getElementById("siteTiles");
-  if (!tiles) return;
-
-  tiles.innerHTML = "";
-
-  const head = document.createElement("div");
-  head.style.gridColumn = "1 / -1";
-  head.style.fontWeight = "900";
-  head.style.color = "var(--accent-darker)";
-  head.style.margin = "4px 2px 10px";
-  head.textContent = parentName ? `${parentName} — Sous-dossiers` : "📍 Sous-dossiers";
-  tiles.appendChild(head);
-
-  folders.forEach(f => {
-    const div = document.createElement("div");
-    div.className = "site-tile";
-
-    const icon = getFolderIcon(f.name);
-    div.innerHTML = `
-      <div class="icon">${icon}</div>
-      <div class="label">${f.name}</div>
-    `;
-
-    applyFolderTooltip(div, f.name);
-
-    div.onclick = async () => {
-      // clique tuile -> ouvrir dossier dans tableau (sans repasser en plein écran)
-      const realId = getDriveFolderId(f);
-      const childLi = document.querySelector(`#folderTree li[data-id="${realId}"]`);
-      if (childLi) {
-        await loadFolderFilesOnClick(childLi, null);
-        childLi.scrollIntoView({block:"center"});
-      } else {
-        // fallback
-        localStorage.setItem('lastFolderId', realId);
-        localStorage.setItem("lastFolderPath", (parentName ? parentName + "/" : "") + f.name);
-
-        const files2 = await fetchFolderContents(realId);
-        const filtered2 = (files2 || []).filter(x =>
-          /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(x.name)
-        );
-        previewFiles = filtered2.filter(x =>
-          /\.(jpg|jpeg|png|gif|webp|pdf|mp4|webm|mov|m4v)$/i.test(x.name)
-        );
-
-        showSiteTilesInline(); // ✅ on reste en inline
-        displayFiles(filtered2, f.name);
-      }
-    };
-
-    tiles.appendChild(div);
-  });
-}
-
-
-  
 async function renderSiteSubfolderTiles(siteId, siteName="") {
   const tiles = document.getElementById("siteTiles");
   if (!tiles) return;
 
   // charge la liste des dossiers du site
   const files = await fetchFolderContents(siteId);
-const folders = (files || [])
-  .filter(isDriveFolderOrShortcutFolder)
-
+  const folders = (files || [])
+    .filter(f => f.mimeType === 'application/vnd.google-apps.folder')
     .sort((a,b) => a.name.localeCompare(b.name, 'fr', { sensitivity:'base' }));
 
   tiles.innerHTML = "";
 
-  // Si pas de sous-dossiers -> afficher directement les fichiers du site
+  // Si pas de sous-dossiers → on ne montre pas les tuiles (on laisse le flux classique)
   if (!folders.length){
-    hideSiteTiles();
-    showTable();
-
-    // mémorise le dossier courant comme "dernier dossier"
-    localStorage.setItem('lastFolderId', siteId);
-    localStorage.setItem("lastFolderPath", siteName || "");
-
-    const files2 = await fetchFolderContents(siteId);
-    const filtered = (files2 || []).filter(x =>
-      /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(x.name)
-    );
-
-    // preview : inclure images + pdf + vidéos
-    previewFiles = filtered.filter(x =>
-      /\.(jpg|jpeg|png|gif|webp|pdf|mp4|webm|mov|m4v)$/i.test(x.name)
-    );
-
-    displayFiles(filtered, siteName || "");
+    hideSiteTiles();           // ✅ et donc on revoit le tableau
     return;
   }
-
 
   // petit titre au-dessus des tuiles (optionnel mais pratique)
   const head = document.createElement("div");
@@ -3526,35 +3302,30 @@ applyFolderTooltip(div, f.name);
     div.onclick = async () => {
       // on quitte le mode tuiles
       hideSiteTiles();
-showTable(); // ✅ sinon si on était en plein écran tuiles, le tableau reste caché
+
       // on essaye de retrouver le LI déjà créé par toggleFolder
-const realId = getDriveFolderId(f);
-
-const childLi = document.querySelector(`#folderTree li[data-id="${realId}"]`);
-if (childLi) {
-  await loadFolderFilesOnClick(childLi, null);
-  childLi.scrollIntoView({block:"center"});
-} else {
-  // fallback
-  localStorage.setItem('lastFolderId', realId);
-  localStorage.setItem("lastFolderPath", (siteName ? siteName + "/" : "") + f.name);
-
-  const files2 = await fetchFolderContents(realId);
-  const filtered = files2.filter(x =>
-    /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(x.name)
-  );
-  previewFiles = filtered.filter(x => /\.(jpg|jpeg|pdf|mp4|gif|webm|mov|m4v)$/i.test(x.name));
-  displayFiles(filtered, f.name);
-}
-
+      const childLi = document.querySelector(`#folderTree li[data-id="${f.id}"]`);
+      if (childLi) {
+        await loadFolderFilesOnClick(childLi, null);
+        childLi.scrollIntoView({block:"center"});
+      } else {
+        // fallback (rare) : si le li n'existe pas, on force l'affichage du contenu
+        localStorage.setItem('lastFolderId', f.id);
+        localStorage.setItem("lastFolderPath", (siteName ? siteName + "/" : "") + f.name);
+        const files2 = await fetchFolderContents(f.id);
+        const filtered = files2.filter(x =>
+          /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(x.name)
+        );
+        previewFiles = filtered.filter(x => /\.(jpg|jpeg|pdf|mp4|gif|webm|mov|m4v)$/i.test(x.name));
+        displayFiles(filtered, f.name);
+      }
     };
 
     tiles.appendChild(div);
   });
 
-  showSiteTilesFull();
+  showSiteTiles();
 }
-
 
 
 // Clique sur un site (tile ou sidebar) → ouvre l'arbre + affiche les sous-dossiers en tuiles
@@ -3642,96 +3413,3 @@ function clearBrowserCache() {
 
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
