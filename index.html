@@ -1631,10 +1631,11 @@ if (folderNameLower.includes("traça_temp") || folderNameLower.includes("traca_t
         const histId = getDriveFolderId(hist);
         const histFiles = await fetchFolderContents(histId);
 
-        const z3Files = histFiles.filter(ff =>
-          ff.name.toUpperCase().startsWith("Z3") &&
-          ff.name.toLowerCase().endsWith(".CSV")
-        );
+const z3Files = histFiles.filter(ff =>
+  /^z3/i.test(ff.name) &&
+  /\.csv$/i.test(ff.name)
+);
+
 
         localStorage.setItem("csvZ3Files", JSON.stringify(z3Files));
         console.log("[Z3] Préchargés depuis Historique voisin:", z3Files.length);
@@ -3633,5 +3634,6 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
