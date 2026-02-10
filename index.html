@@ -1717,6 +1717,19 @@ function buildFullFolderPath(li) {
 const fullPath = buildFullFolderPath(li);
 localStorage.setItem("lastFolderPath", fullPath);
 console.log("[Folder] Chemin complet enregistré :", fullPath);
+  
+function buildFolderIdChain(li) {
+  const ids = [];
+  let current = li;
+  while (current) {
+    if (current.dataset?.id) ids.unshift(current.dataset.id);
+    current = current.parentElement.closest("li");
+  }
+  return ids; // [siteId, ..., folderId]
+}
+
+const idChain = buildFolderIdChain(li);
+localStorage.setItem("lastFolderIdChain", JSON.stringify(idChain));
 
 
   const folderName = nameSpan ? nameSpan.textContent.toLowerCase() : "";
@@ -2494,8 +2507,14 @@ async function clearFilter(){
   filterStartDate = '';
   filterEndDate   = '';
 
+suppressAutoFilter = true;
+try {
   fpStart?.clear();
   fpEnd?.clear();
+} finally {
+  suppressAutoFilter = false;
+}
+
 
   // ✅ désactive campagne
   activeCampaignKey = "";
@@ -2852,91 +2871,41 @@ let hotDaysMap = {}; // { 'YYYYMMDD': true }
 
 async function scanSiteHotDays(siteId) {
   const hotDays = {};
-  console.time(`[SCAN] Durée scanSiteHotDays (${siteId})`);
-  console.log(`[SCAN] Scan du site ${siteId} → dossier Traça_Temp`);
+  const label = `[SCAN] Durée scanSiteHotDays (${siteId})`;
+  console.time(label);
 
   try {
-const siblings = await fetchFolderContents(siteId);
+    const siblings = await fetchFolderContents(siteId);
 
-const tracatemp = siblings.find(s =>
-  isDriveFolderOrShortcutFolder(s) &&
-  (
-    (s.name || "").toLowerCase().includes("traça_temp") ||
-    (s.name || "").toLowerCase().includes("traca_temp")
-  )
-);
+    const tracatemp = siblings.find(s =>
+      isDriveFolderOrShortcutFolder(s) &&
+      /trac(a|ç)[ _-]*temp/i.test(s.name || "")     // ✅ plus robuste
+    );
 
-
-if (!tracatemp) {
-  console.warn(`[SCAN] Aucun dossier Traça_Temp trouvé pour le site ${siteId}`);
-  return hotDays;
-}
-
-const tracatempId = getDriveFolderId(tracatemp);     // ✅ ID réel (targetId si shortcut)
-const files = await fetchFolderContents(tracatempId);
-
-    const csvFiles = files.filter(f => f.name.toLowerCase().endsWith(".csv"));
-    console.log(`[SCAN] ${csvFiles.length} CSV trouvés dans ${tracatemp.name}`);
-
-    for (const f of csvFiles) {
-      try {
-const realId = getDriveFileId(f);
-const res = await fetch(
-  `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`
-);
-
-        if (!res.ok) continue;
-
-        const text = await res.text();
-        const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
-        if (lines.length < 2) continue;
-
-        const headers = lines[0].split(",").map(h => h.replace(/"/g, "").trim().toLowerCase());
-
-        // 🔍 2ème occurrence (comme ton ancien index)
-        let idxInf = headers.map((h,i)=>({h,i})).filter(o=>o.h.includes("sonde ac inf"))[1]?.i;
-        let idxSup = headers.map((h,i)=>({h,i})).filter(o=>o.h.includes("sonde ac sup"))[1]?.i;
-        if (idxInf === undefined && idxSup === undefined) continue;
-
-        let countFlame = 0;
-        for (let i = 1; i < lines.length; i++) {
-          const cols = lines[i].split(",").map(c => c.replace(/"/g, "").trim());
-
-          // 🕔 ignore la nuit (<5h)
-          const timeStr = cols[0];
-          if (timeStr && /^(\d{2}):(\d{2})/.test(timeStr)) {
-            const [_, hh] = timeStr.match(/^(\d{2}):/);
-            const hour = parseInt(hh, 10);
-            if (hour < 5) continue;
-          }
-
-          const vInf = idxInf !== undefined ? parseFloat(cols[idxInf]) : NaN;
-          const vSup = idxSup !== undefined ? parseFloat(cols[idxSup]) : NaN;
-
-if (
-    (isFinite(vInf) && vInf > 40 && vInf < 300) ||
-    (isFinite(vSup) && vSup > 40 && vSup < 300)
-) {
-    countFlame++;
-}
-
-        }
-
-        if (countFlame >= 1) {
-          const m = f.name.match(/(\d{8})\.csv$/i);
-          if (m) hotDays[m[1]] = true;
-        }
-
-      } catch (e) {
-        console.warn(`[SCAN] Erreur lecture fichier ${f.name}:`, e);
-      }
+    if (!tracatemp) {
+      console.warn(`[SCAN] Aucun dossier Traça_Temp trouvé pour le site ${siteId}`);
+      return hotDays;
     }
 
-console.log(`[SCAN] 🔥 ${Object.keys(hotDays).length} jours chauds détectés pour le site`);
-console.timeEnd(`[SCAN] Durée scanSiteHotDays (${siteId})`);
-localStorage.setItem(`hotDays_${siteId}`, JSON.stringify(hotDays));
+    const tracatempId = getDriveFolderId(tracatemp);
+    const files = await fetchFolderContents(tracatempId);
 
-return hotDays; // ⛔️ on NE touche PLUS aux datepickers ici
+    const csvFiles = files.filter(f => (f.name || "").toLowerCase().endsWith(".csv"));
+
+    for (const f of csvFiles) {
+      // ... ton scan ...
+    }
+
+    localStorage.setItem(`hotDays_${siteId}`, JSON.stringify(hotDays));
+    return hotDays;
+
+  } catch (err) {
+    console.error("[SCAN] Erreur générale scanSiteHotDays:", err);
+    return hotDays;
+  } finally {
+    console.timeEnd(label); // ✅ toujours exécuté
+  }
+}
 
 
 
@@ -3691,12 +3660,38 @@ const last = localStorage.getItem("lastFolderId");
 if (last) {
   // attendre un peu que l'arborescence soit rendue
   setTimeout(() => {
-    const li = document.querySelector(`#folderTree li[data-id="${last}"]`);
-    if (li) {
-      loadFolderFilesOnClick(li);
-    } else {
-      console.warn("[INIT] Impossible de retrouver le dernier dossier ouvert :", last);
+const chain = JSON.parse(localStorage.getItem("lastFolderIdChain") || "[]");
+if (chain.length) {
+  // on attend que la racine soit chargée
+  setTimeout(async () => {
+    // 1) ouvrir le site (chain[0])
+    const siteLi = document.querySelector(`#folderTree > li[data-id="${chain[0]}"]`);
+    if (!siteLi) return console.warn("[INIT] Site introuvable:", chain[0]);
+
+    await expandFolder(siteLi);
+
+    // 2) dérouler la chaîne
+    let currentLi = siteLi;
+    for (let i = 1; i < chain.length; i++) {
+      const id = chain[i];
+      // s'assurer que les enfants existent
+      await expandFolder(currentLi);
+      const nextLi = currentLi.querySelector(`li[data-id="${id}"]`);
+      if (!nextLi) {
+        console.warn("[INIT] Maillon introuvable dans la chaîne:", id);
+        return;
+      }
+      currentLi = nextLi;
     }
+
+    // 3) ouvrir le dossier final
+    await loadFolderFilesOnClick(currentLi, null);
+    currentLi.scrollIntoView({ block: "center" });
+  }, 1200);
+} else {
+  console.warn("[INIT] Pas de chaîne d'IDs enregistrée");
+}
+
   }, 1200);
 }
 
@@ -3740,6 +3735,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
