@@ -1797,22 +1797,28 @@ if (folderNameLower.includes("traça_temp") || folderNameLower.includes("traca_t
 
 
   // Charger fichiers CSV/JPG classiques du dossier
-  const files = await fetchFolderContents(li.dataset.id);
+const files = await fetchFolderContents(li.dataset.id);
 
 const subFolders = (files || []).filter(isDriveFolderOrShortcutFolder);
 
-// ✅ extension OU mimeType OU shortcut.targetMimeType
-const visibleFiles = (files || []).filter(isDisplayableFile);
+// Tous les éléments qui NE SONT PAS des dossiers (donc fichiers + raccourcis fichiers,
+// même si Drive ne donne pas shortcutDetails)
+const nonFolderItems = (files || []).filter(f => !isDriveFolderOrShortcutFolder(f));
 
-// ✅ si pas de fichiers mais des sous-dossiers -> mode tuiles sur ce dossier
-if (visibleFiles.length === 0 && subFolders.length > 0) {
+// On garde ton filtre “propre”
+const displayable = nonFolderItems.filter(isDisplayableFile);
+
+// ✅ Mode tuiles seulement si VRAIMENT il n’y a AUCUN fichier (même non reconnu)
+if (nonFolderItems.length === 0 && subFolders.length > 0) {
   const folderName = li.querySelector(".folder-name")?.textContent?.trim() || "";
   await renderSiteSubfolderTiles(li.dataset.id, folderName);
   return;
 }
 
-// ✅ la liste affichée = fichiers affichables
-const filtered = (files || []).filter(isDisplayableFile);
+// ✅ Si Drive ne nous donne pas assez d’infos (PDF raccourci sans extension),
+// on affiche quand même la liste au lieu de revenir aux tuiles
+const filtered = (displayable.length > 0) ? displayable : nonFolderItems;
+
 
 
 
@@ -2342,6 +2348,19 @@ if (isPptFile(f)) {
   `;
 }
 
+// === Fallback : fichier non reconnu => on propose Ouvrir + Télécharger quand même ===
+if (!isImageFile(f) && !isVideoFile(f) && !isPdfFile(f) && !isPptFile(f) && !f.name.toLowerCase().endsWith(".csv")) {
+  const baseUrl = `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`;
+
+  html += `
+    <a href="${baseUrl}&download=1" target="_blank">
+      <button class="action-btn">Télécharger</button>
+    </a>
+    <a href="${baseUrl}" target="_blank">
+      <button class="action-btn">Ouvrir</button>
+    </a>
+  `;
+}
 
 
   
@@ -3731,6 +3750,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
