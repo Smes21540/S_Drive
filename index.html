@@ -2910,12 +2910,7 @@ async function scanSiteHotDays(siteId) {
 
 
 
-  } catch (err) {
-    console.error("[SCAN] Erreur générale scanSiteHotDays:", err);
-    console.timeEnd(`[SCAN] Durée scanSiteHotDays (${siteId})`);
-    return hotDays;
-  }
-}
+
 
 
 function loadSiteHotDays(siteId) {
@@ -3736,6 +3731,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
