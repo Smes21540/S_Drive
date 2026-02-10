@@ -934,6 +934,14 @@ let filterStartDate="", filterEndDate="";
 let themeMenuTimer;
 let cancelScan = false; // 🛑 permet d’arrêter le scan si on clique ailleurs
 
+// === Anti race-condition UI (tuiles/tableau) ===
+let NAV_TOKEN = 0;
+function nextNavToken() {
+  NAV_TOKEN += 1;
+  return NAV_TOKEN;
+}
+
+
 function isDriveFolderOrShortcutFolder(f){
   return (
     f?.mimeType === "application/vnd.google-apps.folder" ||
@@ -1549,6 +1557,10 @@ async function loadFolderFilesOnClick(li, event){
     }
   }
 
+  // ✅ Anti “retour tuiles” : dès qu’on ouvre un dossier, on invalide les renders tuiles en route
+  nextNavToken();
+  hideSiteTiles();
+  
   // ✅ 2) Si toujours rien, on sort proprement (plus de ReferenceError)
   if (!li) {
     console.warn("[loadFolderFilesOnClick] appelé sans li valide");
@@ -3438,31 +3450,36 @@ div.onclick = async () => {
   showSiteTiles();
 }
 
-async function renderSiteSubfolderTiles(siteId, siteName="") {
+async function renderSiteSubfolderTiles(siteId, siteName="", token=null) {
+  if (token !== null && token !== NAV_TOKEN) return;
+
   const tiles = document.getElementById("siteTiles");
   if (!tiles) return;
 
-  // charge la liste des dossiers du site
   const files = await fetchFolderContents(siteId);
-const folders = (files || [])
-  .filter(isDriveFolderOrShortcutFolder)
+  if (token !== null && token !== NAV_TOKEN) return;
 
+  const folders = (files || [])
+    .filter(isDriveFolderOrShortcutFolder)
     .sort((a,b) => a.name.localeCompare(b.name, 'fr', { sensitivity:'base' }));
 
   tiles.innerHTML = "";
 
+
   // Si pas de sous-dossiers -> afficher directement les fichiers du site
-  if (!folders.length){
-    hideSiteTiles();
+if (!folders.length){
+  hideSiteTiles();
 
-    // mémorise le dossier courant comme "dernier dossier"
-    localStorage.setItem('lastFolderId', siteId);
-    localStorage.setItem("lastFolderPath", siteName || "");
+  localStorage.setItem('lastFolderId', siteId);
+  localStorage.setItem("lastFolderPath", siteName || "");
 
-    const files2 = await fetchFolderContents(siteId);
-    const filtered = (files2 || []).filter(x =>
-      /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(x.name)
-    );
+  const files2 = await fetchFolderContents(siteId);
+  if (token !== null && token !== NAV_TOKEN) return;
+
+  const filtered = (files2 || []).filter(x =>
+    /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(x.name)
+  );
+
 
     // preview : inclure images + pdf + vidéos
     previewFiles = filtered.filter(x =>
@@ -3498,9 +3515,10 @@ applyFolderTooltip(div, f.name);
 
 
     
-    div.onclick = async () => {
-      // on quitte le mode tuiles
-      hideSiteTiles();
+div.onclick = async () => {
+  nextNavToken();   // invalide tout rendu en route
+  hideSiteTiles();
+
 
       // on essaye de retrouver le LI déjà créé par toggleFolder
 const realId = getDriveFolderId(f);
@@ -3529,23 +3547,28 @@ if (childLi) {
 
     tiles.appendChild(div);
   });
-
+if (token !== null && token !== NAV_TOKEN) return;
   showSiteTiles();
 }
 
 
 // Clique sur un site (tile ou sidebar) → ouvre l'arbre + affiche les sous-dossiers en tuiles
 async function openSiteAndShowTiles(siteId, siteName="") {
+  const myToken = nextNavToken(); // cette action devient la nav courante
+
   const controls = document.querySelector(".controls");
   if (controls) controls.style.display = "flex";
 
   await refreshCampaignUIForSite(siteId);
+  if (myToken !== NAV_TOKEN) return;
 
   const li = document.querySelector(`#folderTree > li[data-id="${siteId}"]`);
-  if (li) await expandFolder(li);   // ✅ au lieu de toggleFolder(li)
+  if (li) await expandFolder(li);
+  if (myToken !== NAV_TOKEN) return;
 
-  await renderSiteSubfolderTiles(siteId, siteName);
+  await renderSiteSubfolderTiles(siteId, siteName, myToken);
 }
+
 
 
 
@@ -3618,6 +3641,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
