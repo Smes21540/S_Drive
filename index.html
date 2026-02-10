@@ -1682,13 +1682,16 @@ const visibleFiles = (files || []).filter(f =>
   /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(f.name)
 );
 
-// ✅ si pas de fichiers mais des sous-dossiers -> mode tuiles sur ce dossier
-if (visibleFiles.length === 0 && subFolders.length > 0) {
-  // prépare les tuiles pour ce niveau
+const hasRealFiles = files.some(f =>
+  !isDriveFolderOrShortcutFolder(f)
+);
+
+if (!hasRealFiles && subFolders.length > 0) {
   const folderName = li.querySelector(".folder-name")?.textContent?.trim() || "";
   await renderSiteSubfolderTiles(li.dataset.id, folderName);
   return;
 }
+
 
 
   
@@ -3634,6 +3637,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
