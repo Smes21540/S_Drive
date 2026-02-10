@@ -1575,6 +1575,13 @@ if (li.dataset.loaded === 'true') {
 
     const files = await fetchFolderContents(li.dataset.id);
 
+console.log("DEBUG folder files:", files.map(f => ({
+  name: f.name,
+  mimeType: f.mimeType,
+  hasShortcutDetails: !!f.shortcutDetails,
+  targetId: f.shortcutDetails?.targetId,
+  targetMimeType: f.shortcutDetails?.targetMimeType,
+})));
 
 
 
@@ -3733,6 +3740,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
