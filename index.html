@@ -1106,33 +1106,11 @@ async function refreshCampaignUIForSite(siteId){
 
 
   
-async function getTonnageForDate(siteRoot, dateStr) {
+async function getTonnageForDate(siteId, dateStr) {
 
-    console.log("=== TONNAGE DEBUG ===");
-    console.log("Site :", siteRoot);
-    console.log("Date :", dateStr);
+  try {
+    const folders = await fetchFolderContents(siteId);
 
-    try {
-        // On récupère le chemin complet actuel
-const path = (localStorage.getItem("lastFolderPath") || "").split("/");
-
-// Exemple : ["Valbonne","Consommation Gaz"]
-// On prend la racine du site : "Valbonne"
-const siteName = path[0];
-
-// On liste les dossiers au niveau du site
-const root = await fetchFolderContents(ROOT_FOLDER_ID);  // l’ID Drive de ton dossier principal
-
-// On trouve le dossier du site
-const siteFolder = root.find(f => f.name === siteName);
-
-if (!siteFolder) {
-    console.warn("❌ Impossible de trouver le dossier du site :", siteName);
-    return 0;
-}
-
-// Maintenant on scanne les sous-dossiers du site
-const folders = await fetchFolderContents(getDriveFolderId(siteFolder));
 
 
 
@@ -1250,11 +1228,14 @@ const url = `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}
             return 0;
         }
 
-        const diff = last - first;
+if (last < first) {
+  console.warn("⚠️ Cumul réinitialisé, tonnage ignoré");
+  return 0;
+}
 
-        console.log("✔ Tonnage calculé =", diff);
+const diff = last - first;
+return diff;
 
-        return diff;
 
     } catch (e) {
         console.error("💥 Exception tonnage :", e);
@@ -1549,7 +1530,7 @@ for (const f of folders) {
 
   
 async function loadFolderFilesOnClick(li, event){
-
+let filtered = [];
   isUserNavigating = true;   // 🔒 début navigation utilisateur
 
   try {
@@ -1689,13 +1670,13 @@ const z3Files = histFiles.filter(ff =>
 
 
 
-  // Charger fichiers CSV/JPG classiques du dossier
 const files = await fetchFolderContents(li.dataset.id);
 
-// ✅ fichiers visibles (UNE SEULE FOIS)
-const filtered = (files || []).filter(f =>
+// ✅ fichiers visibles (portée globale dans la fonction)
+filtered = (files || []).filter(f =>
   /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(f.name)
 );
+
 
 // ✅ sous-dossiers
 const subFolders = (files || []).filter(isDriveFolderOrShortcutFolder);
@@ -3355,13 +3336,14 @@ const res = await fetch(
 
   // TONNAGE (reprend ton code)
   const dateStr = tdDate.textContent.split(" ")[0];
-  const fullPath = localStorage.getItem("lastFolderPath") || "";
-  const siteRoot = fullPath.split("/")[0];
-  let tonnage = 0;
+const siteLi = getSiteRootLi(tr);
+const siteId = siteLi?.dataset?.id;
 
-if (siteRoot && dateStr && siteRoot.length > 0) {
-  tonnage = await getTonnageForDate(siteRoot, dateStr);
+let tonnage = 0;
+if (siteId && dateStr) {
+  tonnage = await getTonnageForDate(siteId, dateStr);
 }
+
 
 if (tonnage === null || !isFinite(tonnage)) {
   tr.dataset.tonnage = "";
@@ -3691,6 +3673,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
