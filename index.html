@@ -1624,7 +1624,7 @@ const filtered = files.filter(f =>
   /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(f.name)
 );
 
-// ✅ si sous-dossiers => tuiles inline
+// ✅ si sous-dossiers => tuiles inline (tuiles + tableau)
 if (subFolders.length > 0) {
   const tiles = document.getElementById("siteTiles");
   if (tiles) {
@@ -1632,9 +1632,17 @@ if (subFolders.length > 0) {
     tiles.style.display = "grid";
   }
 
-  // réutilise ta fonction existante
-  await renderSiteSubfolderTiles(li.dataset.id, nameSpan?.textContent || "");
+  // ✅ IMPORTANT: inline = on garde le tableau visible
+  showSiteTilesInline();
+
+  // ✅ on rend les tuiles à partir de la liste déjà connue (subFolders)
+  await renderInlineSubfolderTiles(li, subFolders, nameSpan?.textContent || "");
+} else {
+  // ✅ pas de sous-dossiers => on est sur un dossier final: tableau visible, pas de tuiles
+  hideSiteTiles();
+  showTable();
 }
+
 
 
 
@@ -3442,6 +3450,7 @@ const folders = (files || [])
   // Si pas de sous-dossiers -> afficher directement les fichiers du site
   if (!folders.length){
     hideSiteTiles();
+    showTable();
 
     // mémorise le dossier courant comme "dernier dossier"
     localStorage.setItem('lastFolderId', siteId);
@@ -3489,7 +3498,7 @@ applyFolderTooltip(div, f.name);
     div.onclick = async () => {
       // on quitte le mode tuiles
       hideSiteTiles();
-
+showTable(); // ✅ sinon si on était en plein écran tuiles, le tableau reste caché
       // on essaye de retrouver le LI déjà créé par toggleFolder
 const realId = getDriveFolderId(f);
 
@@ -3605,6 +3614,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
