@@ -725,6 +725,20 @@ body[data-theme="orange"] #smes-footer-bg {
   word-break: break-word;
 }
 
+/* ✅ Mode inline : tuiles dans le flux normal (pas centrées en absolute) */
+.site-tiles.inline {
+  position: static !important;
+  left: auto !important;
+  top: auto !important;
+  transform: none !important;
+
+  width: 100% !important;
+  max-height: 260px;     /* ajuste si tu veux */
+  overflow: auto;
+
+  margin: 0 0 12px 0;
+  padding: 8px;
+}
 
 
   
@@ -1599,10 +1613,29 @@ console.log("[Folder] Chemin complet enregistré :", fullPath);
   }
 
   // Charger fichiers CSV/JPG classiques du dossier
-  const files = await fetchFolderContents(li.dataset.id);
+const files = await fetchFolderContents(li.dataset.id);
+
+// ✅ sous-dossiers
+const subFolders = files.filter(isDriveFolderOrShortcutFolder);
+
+// ✅ fichiers affichables
 const filtered = files.filter(f =>
+  !isDriveFolderOrShortcutFolder(f) &&
   /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(f.name)
 );
+
+// ✅ si sous-dossiers => tuiles inline
+if (subFolders.length > 0) {
+  const tiles = document.getElementById("siteTiles");
+  if (tiles) {
+    tiles.classList.add("inline");
+    tiles.style.display = "grid";
+  }
+
+  // réutilise ta fonction existante
+  await renderSiteSubfolderTiles(li.dataset.id, nameSpan?.textContent || "");
+}
+
 
 
 
@@ -1702,7 +1735,9 @@ if (Object.keys(hotDaysMap).length > 0) {
 }
 
 async function displayFiles(files, folderName){
-
+  // ✅ Ne cache les tuiles que si elles sont en mode plein écran (pas inline)
+  const tiles = document.getElementById("siteTiles");
+  if (tiles && !tiles.classList.contains("inline")) {
   hideSiteTiles();
 
 
@@ -3261,17 +3296,32 @@ function hideTable(){
   if (tw) tw.style.display = "none";
 }
 
-function showSiteTiles(){
+// ✅ Plein écran = tuiles seules (comportement actuel à la racine / choix site)
+function showSiteTilesFull(){
   const tiles = document.getElementById("siteTiles");
-  if (tiles) tiles.style.display = "grid";
-  hideTable(); // ✅ cache le tableau → plus de colonnes vides visibles
+  if (tiles){
+    tiles.classList.remove("inline");
+    tiles.style.display = "grid";
+  }
+  hideTable();
 }
 
+// ✅ Inline = tuiles + tableau (quand il y a des sous-dossiers ET des fichiers)
+function showSiteTilesInline(){
+  const tiles = document.getElementById("siteTiles");
+  if (tiles){
+    tiles.classList.add("inline");
+    tiles.style.display = "grid";
+  }
+  showTable();
+}
+
+// ✅ Cacher uniquement les tuiles (ne touche pas au tableau)
 function hideSiteTiles(){
   const tiles = document.getElementById("siteTiles");
   if (tiles) tiles.style.display = "none";
-  showTable(); // ✅ on remet le tableau dès qu'on sort des tuiles
 }
+
 
 
 function renderRootTiles(folders){
@@ -3316,9 +3366,66 @@ div.onclick = async () => {
     tiles.appendChild(div);
   });
 
-  showSiteTiles();
+  showSiteTilesFull();
 }
 
+async function renderInlineSubfolderTiles(parentLi, folders, parentName="") {
+  const tiles = document.getElementById("siteTiles");
+  if (!tiles) return;
+
+  tiles.innerHTML = "";
+
+  const head = document.createElement("div");
+  head.style.gridColumn = "1 / -1";
+  head.style.fontWeight = "900";
+  head.style.color = "var(--accent-darker)";
+  head.style.margin = "4px 2px 10px";
+  head.textContent = parentName ? `${parentName} — Sous-dossiers` : "📍 Sous-dossiers";
+  tiles.appendChild(head);
+
+  folders.forEach(f => {
+    const div = document.createElement("div");
+    div.className = "site-tile";
+
+    const icon = getFolderIcon(f.name);
+    div.innerHTML = `
+      <div class="icon">${icon}</div>
+      <div class="label">${f.name}</div>
+    `;
+
+    applyFolderTooltip(div, f.name);
+
+    div.onclick = async () => {
+      // clique tuile -> ouvrir dossier dans tableau (sans repasser en plein écran)
+      const realId = getDriveFolderId(f);
+      const childLi = document.querySelector(`#folderTree li[data-id="${realId}"]`);
+      if (childLi) {
+        await loadFolderFilesOnClick(childLi, null);
+        childLi.scrollIntoView({block:"center"});
+      } else {
+        // fallback
+        localStorage.setItem('lastFolderId', realId);
+        localStorage.setItem("lastFolderPath", (parentName ? parentName + "/" : "") + f.name);
+
+        const files2 = await fetchFolderContents(realId);
+        const filtered2 = (files2 || []).filter(x =>
+          /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(x.name)
+        );
+        previewFiles = filtered2.filter(x =>
+          /\.(jpg|jpeg|png|gif|webp|pdf|mp4|webm|mov|m4v)$/i.test(x.name)
+        );
+
+        showSiteTilesInline(); // ✅ on reste en inline
+        displayFiles(filtered2, f.name);
+      }
+    };
+
+    tiles.appendChild(div);
+  });
+}
+
+
+  
 async function renderSiteSubfolderTiles(siteId, siteName="") {
   const tiles = document.getElementById("siteTiles");
   if (!tiles) return;
@@ -3408,8 +3515,9 @@ if (childLi) {
     tiles.appendChild(div);
   });
 
-  showSiteTiles();
+  showSiteTilesFull();
 }
+
 
 
 // Clique sur un site (tile ou sidebar) → ouvre l'arbre + affiche les sous-dossiers en tuiles
@@ -3497,6 +3605,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
