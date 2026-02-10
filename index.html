@@ -2879,7 +2879,7 @@ async function scanSiteHotDays(siteId) {
 
     const tracatemp = siblings.find(s =>
       isDriveFolderOrShortcutFolder(s) &&
-      /trac(a|ç)[ _-]*temp/i.test(s.name || "")     // ✅ plus robuste
+      /trac(a|ç)[ _-]*temp/i.test(s.name || "")
     );
 
     if (!tracatemp) {
@@ -2903,9 +2903,10 @@ async function scanSiteHotDays(siteId) {
     console.error("[SCAN] Erreur générale scanSiteHotDays:", err);
     return hotDays;
   } finally {
-    console.timeEnd(label); // ✅ toujours exécuté
+    console.timeEnd(label);
   }
 }
+
 
 
 
@@ -3735,6 +3736,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
