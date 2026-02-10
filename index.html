@@ -1151,7 +1151,13 @@ const tracatemp = folders.find(f =>
 
         const files = await fetchFolderContents(getDriveFolderId(tracatemp));
 
+if (!files || files.length === 0) {
+  console.warn("⚠️ Traça_Temp vide → tonnage ignoré");
+  return null; // ← PAS 0
+}
 
+
+      
         const csvName = `SA00094_${dateStr.replace(/-/g, "")}.csv`;
 
         console.log("Recherche du fichier :", csvName);
@@ -3351,9 +3357,18 @@ const res = await fetch(
   const dateStr = tdDate.textContent.split(" ")[0];
   const fullPath = localStorage.getItem("lastFolderPath") || "";
   const siteRoot = fullPath.split("/")[0];
-  let tonnage = await getTonnageForDate(siteRoot, dateStr);
-  if (!isFinite(tonnage)) tonnage = 0;
+  let tonnage = 0;
+
+if (siteRoot && dateStr && siteRoot.length > 0) {
+  tonnage = await getTonnageForDate(siteRoot, dateStr);
+}
+
+if (tonnage === null || !isFinite(tonnage)) {
+  tr.dataset.tonnage = "";
+} else {
   tr.dataset.tonnage = Number(tonnage.toFixed(1));
+}
+
 }
 
 
@@ -3676,6 +3691,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
