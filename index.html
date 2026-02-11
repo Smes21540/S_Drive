@@ -1822,6 +1822,7 @@ async function displayFiles(files, folderName){
   const gazTasks = []; // ✅ ICI (une seule fois)
 
 
+const siteIdForDisplay = currentSiteId;
 
 
   
@@ -2175,7 +2176,8 @@ if (
   `;
 
   // ✅ on calcule APRÈS que la ligne est dans le DOM
-  gazTasks.push({ f, tdAction, tr, tdDate });
+  gazTasks.push({ f, tdAction, tr, tdDate, siteId: siteIdForDisplay });
+
 }
 
 
@@ -3205,7 +3207,8 @@ document.getElementById("exportExcelGazBtn").addEventListener("click", function 
 // =========================================
 // === Calcule les valeurs GAZ pour une ligne
 // =========================================
-async function computeGazForRow({ f, tdAction, tr, tdDate }) {
+async function computeGazForRow({ f, tdAction, tr, tdDate, siteId }) {
+
 const realId = getDriveFileId(f);
 const res = await fetch(
   `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`
@@ -3335,12 +3338,11 @@ const res = await fetch(
 
   // TONNAGE (reprend ton code)
   const dateStr = tdDate.textContent.split(" ")[0];
-const siteId = currentSiteId;
-
 let tonnage = 0;
 if (siteId && dateStr) {
   tonnage = await getTonnageForDate(siteId, dateStr);
 }
+
 
 
 
@@ -3672,6 +3674,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
