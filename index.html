@@ -1578,7 +1578,7 @@ for (const f of folders) {
 async function loadFolderFilesOnClick(li, event){
 let filtered = [];
   isUserNavigating = true;   // 🔒 début navigation utilisateur
-
+startScan();   // 🔄
   try {
 
 
@@ -1867,6 +1867,7 @@ if (Object.keys(hotDaysMap).length > 0) {
 
   } finally {
     isUserNavigating = false;
+    endScan();   // 🔄 fin chargement dossier
   }
 
 
@@ -3746,6 +3747,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
