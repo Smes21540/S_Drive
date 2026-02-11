@@ -1699,7 +1699,10 @@ const displayableFiles = filtered.filter(f =>
 console.log("DEBUG displayableFiles:", displayableFiles.length);
 console.log("DEBUG subFolders:", subFolders.length);
 
-
+console.log("FILES RAW:", files.length);
+console.log("FILTERED:", filtered.length);
+console.log("DISPLAYABLE:", displayableFiles.length);
+console.log("SUBFOLDERS:", subFolders.length);
     
 // ⚠️ on passe en tuiles UNIQUEMENT s’il n’y a RIEN à afficher
 if (displayableFiles.length === 0 && subFolders.length > 0) {
@@ -3683,6 +3686,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
