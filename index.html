@@ -1695,6 +1695,12 @@ const displayableFiles = filtered.filter(f =>
   !f.name.toLowerCase().endsWith(".json")
 );
 
+
+console.log("DEBUG displayableFiles:", displayableFiles.length);
+console.log("DEBUG subFolders:", subFolders.length);
+
+
+    
 // ⚠️ on passe en tuiles UNIQUEMENT s’il n’y a RIEN à afficher
 if (displayableFiles.length === 0 && subFolders.length > 0) {
   const folderName = li.querySelector(".folder-name")?.textContent?.trim() || "";
@@ -3575,19 +3581,15 @@ if (childLi) {
   await loadFolderFilesOnClick(childLi, null);
   childLi.scrollIntoView({block:"center"});
 } else {
-  // fallback
-  localStorage.setItem('lastFolderId', realId);
-  localStorage.setItem("lastFolderPath", (siteName ? siteName + "/" : "") + f.name);
+// fallback sécurisé : on force passage par la vraie fonction centrale
+const li = document.querySelector(`#folderTree li[data-id="${realId}"]`);
 
-  const files2 = await fetchFolderContents(realId);
-  const filtered = files2.filter(x =>
-    /\.(csv|jpg|jpeg|png|gif|webp|json|pdf|mp4|webm|mov|m4v|avi|ppsx|pptx)$/i.test(x.name)
-  );
-  previewFiles = filtered
-  .filter(x => /\.(jpg|jpeg|png|gif|webp|pdf|mp4|webm|mov|m4v)$/i.test(x.name))
-  .map(x => ({ ...x, _realId: getDriveFileId(x) }));
+if (li) {
+  await loadFolderFilesOnClick(li, null);
+} else {
+  console.warn("[TILES] Impossible de trouver le dossier dans l'arborescence :", f.name);
+}
 
-  displayFiles(filtered, f.name);
 }
 
     };
@@ -3683,6 +3685,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
