@@ -3335,13 +3335,13 @@ const res = await fetch(
 
   // TONNAGE (reprend ton code)
   const dateStr = tdDate.textContent.split(" ")[0];
-const siteLi = getSiteRootLi(tr);
-const siteId = siteLi?.dataset?.id;
+const siteId = currentSiteId;
 
 let tonnage = 0;
 if (siteId && dateStr) {
   tonnage = await getTonnageForDate(siteId, dateStr);
 }
+
 
 
 if (tonnage === null || !isFinite(tonnage)) {
@@ -3672,6 +3672,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
