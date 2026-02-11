@@ -1131,8 +1131,9 @@ const tracatemp = folders.find(f =>
 
 if (!files || files.length === 0) {
   console.warn("⚠️ Traça_Temp vide → tonnage ignoré");
-  return null; // ← PAS 0
+  return 0;
 }
+
 
 
       
@@ -1167,7 +1168,8 @@ const url = `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}
 
         console.log("✔ CSV téléchargé, longueur :", text.length);
 
-        const lines = text.trim().split(/\r?\n/);
+        const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
+
 
         console.log("Nombre de lignes :", lines.length);
 
@@ -1203,7 +1205,8 @@ const url = `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}
 
         console.log("Header :", header);
 
-        const idx = header.indexOf("Cumul (tonnes)");
+        const idx = header.indexOf("const idx = header.findIndex(h => h.toLowerCase().includes("cumul") && h.toLowerCase().includes("tonne"));
+Cumul (tonnes)");
 
         console.log("Index 'Cumul (tonnes)' :", idx);
 
@@ -1212,8 +1215,11 @@ const url = `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}
             return 0;
         }
 
-        const firstLine = parseCSV(lines[1]);
-        const lastLine  = parseCSV(lines[lines.length - 1]);
+if (lines.length < 2) return 0;
+
+const firstLine = parseCSV(lines[1]);
+const lastLine  = parseCSV(lines[lines.length - 1]);
+
 
         console.log("Première ligne tonnage brute :", firstLine[idx]);
         console.log("Dernière ligne tonnage brute :", lastLine[idx]);
@@ -3674,6 +3680,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
