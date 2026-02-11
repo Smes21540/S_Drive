@@ -1205,8 +1205,11 @@ const url = `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}
 
         console.log("Header :", header);
 
-        const idx = header.indexOf("const idx = header.findIndex(h => h.toLowerCase().includes("cumul") && h.toLowerCase().includes("tonne"));
-Cumul (tonnes)");
+const idx = header.findIndex(h =>
+  h.toLowerCase().includes("cumul") &&
+  h.toLowerCase().includes("tonne")
+);
+
 
         console.log("Index 'Cumul (tonnes)' :", idx);
 
@@ -3680,6 +3683,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
