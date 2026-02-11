@@ -1695,10 +1695,7 @@ if (displayableFiles.length === 0 && subFolders.length > 0) {
 
 
 
-  } finally {
 
-    isUserNavigating = false;   // 🔓 TOUJOURS exécuté
-  }
 
 
   
@@ -1802,6 +1799,12 @@ if (Object.keys(hotDaysMap).length > 0) {
   });
 }
 
+  } finally {
+    isUserNavigating = false;
+  }
+
+
+    
 }
 
 async function displayFiles(files, folderName){
@@ -3669,6 +3672,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
