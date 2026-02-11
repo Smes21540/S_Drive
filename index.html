@@ -1693,12 +1693,6 @@ if (displayableFiles.length === 0 && subFolders.length > 0) {
   return;
 }
 
-// ✅ sinon on affiche normalement (PDF inclus)
-displayFiles(filtered, folderName);
-
-
-// ✅ affichage normal
-displayFiles(filtered, folderName);
 
 
   } finally {
@@ -1790,7 +1784,7 @@ previewFiles = filtered
   .map(f => ({ ...f, _realId: getDriveFileId(f) }));
 
 
-displayFiles(filtered, nameSpan ? nameSpan.textContent : '');
+
 
 
 
@@ -2779,10 +2773,12 @@ const siblings = await fetchFolderContents(siteId);
 
 const tracatemp = siblings.find(s =>
   isDriveFolderOrShortcutFolder(s) &&
-  (s.name || "").toLowerCase().includes("traça_temp") ||
-  isDriveFolderOrShortcutFolder(s) &&
-  (s.name || "").toLowerCase().includes("traca_temp")
+  (
+    (s.name || "").toLowerCase().includes("traça_temp") ||
+    (s.name || "").toLowerCase().includes("traca_temp")
+  )
 );
+
 
 if (!tracatemp) {
   console.warn(`[SCAN] Aucun dossier Traça_Temp trouvé pour le site ${siteId}`);
@@ -3673,6 +3669,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
