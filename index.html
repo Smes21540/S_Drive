@@ -2156,7 +2156,7 @@ if (f.name.toLowerCase().endsWith('.csv')) {
           </a>`;
 
   html += `<button class="action-btn"
-        title="Afficher les données en tableau"
+        title="Afficher les données dans un tableau"
         onclick="openViewer('viewer.html','${realId}','${f.name}')">
   Tableau
 </button>
@@ -2165,7 +2165,7 @@ if (f.name.toLowerCase().endsWith('.csv')) {
   // 👇 bouton Courbes seulement si on n'est PAS dans Historique
   if (!folderName.toLowerCase().includes("historique")) {
     html += `<button class="action-btn"
-        title="Afficher les courbes des différentes données disponible sur une période choisie"
+        title="Afficher les courbes des différentes données disponibles sur une période choisie"
         onclick="openViewer('viewer02.html','${realId}','${f.name}')">
   Courbes
 </button>
@@ -3699,6 +3699,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
