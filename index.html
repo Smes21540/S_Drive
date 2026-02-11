@@ -1704,17 +1704,23 @@ console.log("FILTERED:", filtered.length);
 console.log("DISPLAYABLE:", displayableFiles.length);
 console.log("SUBFOLDERS:", subFolders.length);
     
-// ⚠️ on passe en tuiles UNIQUEMENT s’il n’y a RIEN à afficher
+
+
 const hasCsv = (files || []).some(f =>
   f.name && f.name.toLowerCase().endsWith(".csv")
 );
 
-// 👉 Si aucun CSV ET qu'il y a des sous-dossiers → tuiles
+// 🚫 Mode tuiles UNIQUEMENT si aucun fichier affichable
 if (!hasCsv && subFolders.length > 0) {
   const folderName = li.querySelector(".folder-name")?.textContent?.trim() || "";
   await renderSiteSubfolderTiles(li.dataset.id, folderName);
   return;
 }
+
+// ✅ Sinon → on affiche les fichiers
+hideSiteTiles();
+showTable();
+
 
 
 
@@ -3692,6 +3698,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
