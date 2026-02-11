@@ -1782,8 +1782,6 @@ document.querySelectorAll('#csvTable tbody tr').forEach(tr => {
 scanSiteHotDays(siteId).then(map => {
   hotDaysMap = map;
   console.log(`[CACHE] 🔥 ${Object.keys(hotDaysMap).length} jours chauds détectés et chargés pour ${siteRootLi?.querySelector(".folder-name")?.textContent}`);
-  const active = document.querySelector('#folderTree .active-folder');
-  if (active) active.click();
 });
 
   } else {
@@ -3685,6 +3683,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
