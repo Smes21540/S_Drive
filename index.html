@@ -1385,22 +1385,32 @@ async function loadRootFolders(){
   const rootUL = document.getElementById('folderTree');
   rootUL.innerHTML = '';
 
-  if (ROOT_MODE === "site") {
+if (ROOT_MODE === "site") {
 
-    const li = document.createElement("li");
-    li.dataset.id = ROOT_FOLDER_ID;
-    li.classList.add("expanded");
+  const li = document.createElement("li");
+  li.dataset.id = ROOT_FOLDER_ID;
 
-    const span = document.createElement("span");
-    span.textContent = "Site";
-    span.classList.add("folder-name");
+  const toggle = document.createElement("span");
+  toggle.className = "folder-toggle";
+  toggle.textContent = "";
+  toggle.onclick = (e) => toggleFolder(li, e);
 
-    li.appendChild(span);
-    rootUL.appendChild(li);
-
+  const span = document.createElement("span");
+  span.className = "folder-name";
+  span.textContent = "Site";
+  span.onclick = async (e) => {
+    e?.stopPropagation?.();
     await openSiteAndShowTiles(ROOT_FOLDER_ID, "Site");
-    return;
-  }
+  };
+
+  li.appendChild(toggle);
+  li.appendChild(span);
+  rootUL.appendChild(li);
+
+  await openSiteAndShowTiles(ROOT_FOLDER_ID, "Site");
+  return;
+}
+
 
   // Mode coop (comportement actuel)
   const files = await fetchFolderContents(ROOT_FOLDER_ID);
@@ -3770,6 +3780,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
