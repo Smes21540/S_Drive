@@ -1385,95 +1385,76 @@ async function loadRootFolders(){
   const rootUL = document.getElementById('folderTree');
   rootUL.innerHTML = '';
 
-if (ROOT_MODE === "site") {
+  // 🔥 MODE SITE = comportement historique pur
+  if (ROOT_MODE === "site") {
 
-  const li = document.createElement("li");
-  li.dataset.id = ROOT_FOLDER_ID;
+    const files = await fetchFolderContents(ROOT_FOLDER_ID);
 
-  const toggle = document.createElement("span");
-  toggle.className = "folder-toggle";
-  toggle.textContent = "";
-  toggle.onclick = (e) => toggleFolder(li, e);
+    const rootFolders = files
+      .filter(isDriveFolderOrShortcutFolder)
+      .sort((a,b)=>a.name.localeCompare(b.name,'fr',{sensitivity:'base'}));
 
-  const span = document.createElement("span");
-  span.className = "folder-name";
-  span.textContent = "Site";
-  span.onclick = async (e) => {
-    e?.stopPropagation?.();
-    await openSiteAndShowTiles(ROOT_FOLDER_ID, "Site");
-  };
+    rootFolders.forEach(f => {
+      const li = document.createElement('li');
+      li.dataset.id = getDriveFolderId(f);
 
-  li.appendChild(toggle);
-  li.appendChild(span);
-  rootUL.appendChild(li);
+      const toggle = document.createElement('span');
+      toggle.className = 'folder-toggle';
+      toggle.onclick = (e)=>toggleFolder(li,e);
 
-  await openSiteAndShowTiles(ROOT_FOLDER_ID, "Site");
-  return;
-}
+      const span = document.createElement('span');
+      span.className = 'folder-name';
+      span.innerHTML = `${getFolderIcon(f.name)} ${f.name}`;
+      applyFolderTooltip(span, f.name);
 
+      span.onclick = (e)=>loadFolderFilesOnClick(li,e);
 
-  // Mode coop (comportement actuel)
+      li.appendChild(toggle);
+      li.appendChild(span);
+      rootUL.appendChild(li);
+    });
+
+    return;
+  }
+
+  // 🔵 MODE COOP (ta logique actuelle)
   const files = await fetchFolderContents(ROOT_FOLDER_ID);
 
+  document.querySelector(".controls").style.display = "none";
+  const cb = document.getElementById("campaignBox");
+  if (cb) cb.style.display = "none";
+  activeCampaignKey = "";
 
-// 🔒 Cacher les filtres quand on revient à la racine
-document.querySelector(".controls").style.display = "none";
+  const rootFolders = files
+    .filter(isDriveFolderOrShortcutFolder)
+    .sort((a,b)=>a.name.localeCompare(b.name,'fr',{sensitivity:'base'}));
 
-const cb = document.getElementById("campaignBox");
-if (cb) cb.style.display = "none";
-activeCampaignKey = "";
+  renderRootTiles(rootFolders);
 
-// ✅ Liste dossiers racine
-const rootFolders = files
-  .filter(isDriveFolderOrShortcutFolder)
-  .sort((a,b) => a.name.localeCompare(b.name, 'fr', { sensitivity:'base' }));
+  rootFolders.forEach(f => {
+    const li = document.createElement('li');
+    li.dataset.id = getDriveFolderId(f);
 
+    const toggle = document.createElement('span');
+    toggle.className = 'folder-toggle';
+    toggle.onclick = (e)=>toggleFolder(li,e);
 
-// ✅ Remplit les tuiles à droite (uniquement si non vide)
-renderRootTiles(rootFolders);
+    const span = document.createElement('span');
+    span.className = 'folder-name';
+    span.innerHTML = `${getFolderIcon(f.name)} ${f.name}`;
+    applyFolderTooltip(span, f.name);
 
-// ✅ Remplit la sidebar comme avant
-rootFolders.forEach(f => {
-  const li = document.createElement('li');
-  li.dataset.id = getDriveFolderId(f);
+    span.onclick = async (e)=>{
+      e?.stopPropagation?.();
+      await openSiteAndShowTiles(li.dataset.id, f.name);
+    };
 
+    li.appendChild(toggle);
+    li.appendChild(span);
+    rootUL.appendChild(li);
+  });
+}
 
-
-  const toggle = document.createElement('span');
-  toggle.className = 'folder-toggle';
-  toggle.textContent = '';
-  toggle.onclick = (e) => toggleFolder(li, e);
-
-
-  const span = document.createElement('span');
-  span.className = 'folder-name';
-
-const icon = getFolderIcon(f.name);
-span.innerHTML = `${icon} ${f.name}`;
-
-applyFolderTooltip(span, f.name);
-
-
-
-
-  
-
-span.onclick = async (e) => {
-  e?.stopPropagation?.();
-
-  // ✅ s'assure que la zone contrôles est visible dès clic sur le site
-  const controls = document.querySelector(".controls");
-  if (controls) controls.style.display = "flex";
-
-  await openSiteAndShowTiles(li.dataset.id, (span.textContent || "").trim());
-};
-
-
-
-  li.appendChild(toggle);
-  li.appendChild(span);
-  rootUL.appendChild(li);
-});
 
 
   // 🔥 Vérifier automatiquement deux crans plus bas sans ouvrir visuellement
@@ -3780,6 +3761,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
