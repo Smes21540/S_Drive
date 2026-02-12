@@ -894,6 +894,8 @@ body[data-theme="orange"] #smes-footer-bg {
 <script>
 /* ----------- Config Drive ----------- */
 const ROOT_FOLDER_ID="18QkQPyCZxTCAaoz_qd1wAelmQbSE4ex8";
+const ROOT_MODE = "site"; // "coop" ou "site"
+  
 // ✅ Active/désactive les calculs de consommation gaz
 const ENABLE_GAZ_CALC = true;  // ← passe à false pour désactiver
 
@@ -1379,9 +1381,30 @@ async function fetchChildren(folderId){
 
 
 async function loadRootFolders(){
-const files = await fetchFolderContents(ROOT_FOLDER_ID);
-const rootUL = document.getElementById('folderTree');
-rootUL.innerHTML = '';
+
+  const rootUL = document.getElementById('folderTree');
+  rootUL.innerHTML = '';
+
+  if (ROOT_MODE === "site") {
+
+    const li = document.createElement("li");
+    li.dataset.id = ROOT_FOLDER_ID;
+    li.classList.add("expanded");
+
+    const span = document.createElement("span");
+    span.textContent = "Site";
+    span.classList.add("folder-name");
+
+    li.appendChild(span);
+    rootUL.appendChild(li);
+
+    await openSiteAndShowTiles(ROOT_FOLDER_ID, "Site");
+    return;
+  }
+
+  // Mode coop (comportement actuel)
+  const files = await fetchFolderContents(ROOT_FOLDER_ID);
+
 
 // 🔒 Cacher les filtres quand on revient à la racine
 document.querySelector(".controls").style.display = "none";
@@ -3747,6 +3770,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
