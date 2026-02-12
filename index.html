@@ -894,6 +894,7 @@ body[data-theme="orange"] #smes-footer-bg {
 <script>
 /* ----------- Config Drive ----------- */
 const ROOT_FOLDER_ID="18QkQPyCZxTCAaoz_qd1wAelmQbSE4ex8";
+const ROOT_MODE = "site"; // "site" ou "coop"  
 // ✅ Active/désactive les calculs de consommation gaz
 const ENABLE_GAZ_CALC = true;  // ← passe à false pour désactiver
 
@@ -1379,68 +1380,90 @@ async function fetchChildren(folderId){
 
 
 async function loadRootFolders(){
-const files = await fetchFolderContents(ROOT_FOLDER_ID);
-const rootUL = document.getElementById('folderTree');
-rootUL.innerHTML = '';
 
-// 🔒 Cacher les filtres quand on revient à la racine
-document.querySelector(".controls").style.display = "none";
+  const rootUL = document.getElementById('folderTree');
+  rootUL.innerHTML = '';
 
-const cb = document.getElementById("campaignBox");
-if (cb) cb.style.display = "none";
-activeCampaignKey = "";
+  // 🔵 MODE SITE → comportement EXACTEMENT comme avant
+  if (ROOT_MODE === "site") {
 
-// ✅ Liste dossiers racine
-const rootFolders = files
-  .filter(isDriveFolderOrShortcutFolder)
-  .sort((a,b) => a.name.localeCompare(b.name, 'fr', { sensitivity:'base' }));
+    const files = await fetchFolderContents(ROOT_FOLDER_ID);
 
+    document.querySelector(".controls").style.display = "none";
+    const cb = document.getElementById("campaignBox");
+    if (cb) cb.style.display = "none";
+    activeCampaignKey = "";
 
-// ✅ Remplit les tuiles à droite (uniquement si non vide)
-renderRootTiles(rootFolders);
+    const rootFolders = files
+      .filter(isDriveFolderOrShortcutFolder)
+      .sort((a,b) => a.name.localeCompare(b.name,'fr',{sensitivity:'base'}));
 
-// ✅ Remplit la sidebar comme avant
-rootFolders.forEach(f => {
-  const li = document.createElement('li');
-  li.dataset.id = getDriveFolderId(f);
+    renderRootTiles(rootFolders);
 
+    rootFolders.forEach(f => {
+      const li = document.createElement('li');
+      li.dataset.id = getDriveFolderId(f);
 
+      const toggle = document.createElement('span');
+      toggle.className = 'folder-toggle';
+      toggle.onclick = (e) => toggleFolder(li, e);
 
-  const toggle = document.createElement('span');
-  toggle.className = 'folder-toggle';
-  toggle.textContent = '';
-  toggle.onclick = (e) => toggleFolder(li, e);
+      const span = document.createElement('span');
+      span.className = 'folder-name';
+      span.innerHTML = `${getFolderIcon(f.name)} ${f.name}`;
+      applyFolderTooltip(span, f.name);
 
+      span.onclick = async (e) => {
+        e?.stopPropagation?.();
+        document.querySelector(".controls").style.display = "flex";
+        await openSiteAndShowTiles(li.dataset.id, f.name);
+      };
 
-  const span = document.createElement('span');
-  span.className = 'folder-name';
+      li.appendChild(toggle);
+      li.appendChild(span);
+      rootUL.appendChild(li);
+    });
 
-const icon = getFolderIcon(f.name);
-span.innerHTML = `${icon} ${f.name}`;
+    return;
+  }
 
-applyFolderTooltip(span, f.name);
+  // 🟠 MODE COOP → un cran au-dessus
 
+  const coopFolders = await fetchFolderContents(ROOT_FOLDER_ID);
 
+  const sites = coopFolders
+    .filter(isDriveFolderOrShortcutFolder)
+    .sort((a,b)=>a.name.localeCompare(b.name,'fr',{sensitivity:'base'}));
 
+  // Pas de tuiles racine en coop
+  hideSiteTiles();
 
-  
+  sites.forEach(site => {
 
-span.onclick = async (e) => {
-  e?.stopPropagation?.();
+    const li = document.createElement('li');
+    li.dataset.id = getDriveFolderId(site);
 
-  // ✅ s'assure que la zone contrôles est visible dès clic sur le site
-  const controls = document.querySelector(".controls");
-  if (controls) controls.style.display = "flex";
+    const toggle = document.createElement('span');
+    toggle.className = 'folder-toggle';
+    toggle.onclick = (e)=>toggleFolder(li,e);
 
-  await openSiteAndShowTiles(li.dataset.id, (span.textContent || "").trim());
-};
+    const span = document.createElement('span');
+    span.className = 'folder-name';
+    span.innerHTML = `📁 ${site.name}`;
 
+    span.onclick = async (e)=>{
+      e?.stopPropagation?.();
+      document.querySelector(".controls").style.display = "flex";
+      await openSiteAndShowTiles(li.dataset.id, site.name);
+    };
 
+    li.appendChild(toggle);
+    li.appendChild(span);
+    rootUL.appendChild(li);
+  });
 
-  li.appendChild(toggle);
-  li.appendChild(span);
-  rootUL.appendChild(li);
-});
+}
+
 
 
   // 🔥 Vérifier automatiquement deux crans plus bas sans ouvrir visuellement
@@ -3747,6 +3770,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
