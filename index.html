@@ -894,8 +894,6 @@ body[data-theme="orange"] #smes-footer-bg {
 <script>
 /* ----------- Config Drive ----------- */
 const ROOT_FOLDER_ID="18QkQPyCZxTCAaoz_qd1wAelmQbSE4ex8";
-const ROOT_MODE = "site"; // "coop" ou "site"
-  
 // ✅ Active/désactive les calculs de consommation gaz
 const ENABLE_GAZ_CALC = true;  // ← passe à false pour désactiver
 
@@ -1381,80 +1379,68 @@ async function fetchChildren(folderId){
 
 
 async function loadRootFolders(){
+const files = await fetchFolderContents(ROOT_FOLDER_ID);
+const rootUL = document.getElementById('folderTree');
+rootUL.innerHTML = '';
 
-  const rootUL = document.getElementById('folderTree');
-  rootUL.innerHTML = '';
+// 🔒 Cacher les filtres quand on revient à la racine
+document.querySelector(".controls").style.display = "none";
 
-  // 🔥 MODE SITE = comportement historique pur
-  if (ROOT_MODE === "site") {
+const cb = document.getElementById("campaignBox");
+if (cb) cb.style.display = "none";
+activeCampaignKey = "";
 
-    const files = await fetchFolderContents(ROOT_FOLDER_ID);
+// ✅ Liste dossiers racine
+const rootFolders = files
+  .filter(isDriveFolderOrShortcutFolder)
+  .sort((a,b) => a.name.localeCompare(b.name, 'fr', { sensitivity:'base' }));
 
-    const rootFolders = files
-      .filter(isDriveFolderOrShortcutFolder)
-      .sort((a,b)=>a.name.localeCompare(b.name,'fr',{sensitivity:'base'}));
 
-    rootFolders.forEach(f => {
-      const li = document.createElement('li');
-      li.dataset.id = getDriveFolderId(f);
+// ✅ Remplit les tuiles à droite (uniquement si non vide)
+renderRootTiles(rootFolders);
 
-      const toggle = document.createElement('span');
-      toggle.className = 'folder-toggle';
-      toggle.onclick = (e)=>toggleFolder(li,e);
+// ✅ Remplit la sidebar comme avant
+rootFolders.forEach(f => {
+  const li = document.createElement('li');
+  li.dataset.id = getDriveFolderId(f);
 
-      const span = document.createElement('span');
-      span.className = 'folder-name';
-      span.innerHTML = `${getFolderIcon(f.name)} ${f.name}`;
-      applyFolderTooltip(span, f.name);
 
-      span.onclick = (e)=>loadFolderFilesOnClick(li,e);
 
-      li.appendChild(toggle);
-      li.appendChild(span);
-      rootUL.appendChild(li);
-    });
+  const toggle = document.createElement('span');
+  toggle.className = 'folder-toggle';
+  toggle.textContent = '';
+  toggle.onclick = (e) => toggleFolder(li, e);
 
-    return;
-  }
 
-  // 🔵 MODE COOP (ta logique actuelle)
-  const files = await fetchFolderContents(ROOT_FOLDER_ID);
+  const span = document.createElement('span');
+  span.className = 'folder-name';
 
-  document.querySelector(".controls").style.display = "none";
-  const cb = document.getElementById("campaignBox");
-  if (cb) cb.style.display = "none";
-  activeCampaignKey = "";
+const icon = getFolderIcon(f.name);
+span.innerHTML = `${icon} ${f.name}`;
 
-  const rootFolders = files
-    .filter(isDriveFolderOrShortcutFolder)
-    .sort((a,b)=>a.name.localeCompare(b.name,'fr',{sensitivity:'base'}));
+applyFolderTooltip(span, f.name);
 
-  renderRootTiles(rootFolders);
 
-  rootFolders.forEach(f => {
-    const li = document.createElement('li');
-    li.dataset.id = getDriveFolderId(f);
 
-    const toggle = document.createElement('span');
-    toggle.className = 'folder-toggle';
-    toggle.onclick = (e)=>toggleFolder(li,e);
 
-    const span = document.createElement('span');
-    span.className = 'folder-name';
-    span.innerHTML = `${getFolderIcon(f.name)} ${f.name}`;
-    applyFolderTooltip(span, f.name);
+  
 
-    span.onclick = async (e)=>{
-      e?.stopPropagation?.();
-      await openSiteAndShowTiles(li.dataset.id, f.name);
-    };
+span.onclick = async (e) => {
+  e?.stopPropagation?.();
 
-    li.appendChild(toggle);
-    li.appendChild(span);
-    rootUL.appendChild(li);
-  });
-}
+  // ✅ s'assure que la zone contrôles est visible dès clic sur le site
+  const controls = document.querySelector(".controls");
+  if (controls) controls.style.display = "flex";
 
+  await openSiteAndShowTiles(li.dataset.id, (span.textContent || "").trim());
+};
+
+
+
+  li.appendChild(toggle);
+  li.appendChild(span);
+  rootUL.appendChild(li);
+});
 
 
   // 🔥 Vérifier automatiquement deux crans plus bas sans ouvrir visuellement
@@ -1480,7 +1466,7 @@ async function loadRootFolders(){
     await Promise.all(Array.from({ length: limit }, worker));
   }, 1000);
 
-
+}
 
 
 async function expandFolder(li){
@@ -3761,11 +3747,6 @@ function clearBrowserCache() {
 
 </body>
 </html>
-
-
-
-
-
 
 
 
