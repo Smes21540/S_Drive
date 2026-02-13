@@ -809,12 +809,6 @@ body[data-theme="orange"] #smes-footer-bg {
   <button id="downloadFolderBtn">Télécharger le dossier</button>
   <button id="exportCsvBtn" style="display:none;" title="Voir les barres graphiques de consommation par jour">Graphique</button>
   <button id="exportExcelGazBtn" style="display:none;" title="Exporter les données en Excel (kWh, m³, durée, tonnage)">Export Excel</button>
-  <button id="historiqueTotalBtn"
-        class="gaz-btn"
-        style="display:none;">
-  ⏱ --:--
-</button>
-
 </div>
 
 <!-- ✅ Tuiles dossiers (page principale) -->
@@ -1969,19 +1963,6 @@ if (folderName.toLowerCase().includes("consommation gaz")) {
   if (existingSummary) existingSummary.remove();
 }
 
-// ======================================================
-// === MODE HISTORIQUE
-// ======================================================
-
-const histBtn = document.getElementById("historiqueTotalBtn");
-
-if (folderName.toLowerCase().includes("historique")) {
-  histBtn.style.display = "inline-block";
-  histBtn.textContent = "⏱ Calcul...";
-  await computeHistoriqueTotal(files, histBtn);
-} else {
-  histBtn.style.display = "none";
-}
 
 
 
@@ -2297,6 +2278,21 @@ if (
 
 
 
+// === HISTORIQUE : placeholder durée cycle ===
+if (
+  folderName.toLowerCase().includes("historique") &&
+  f.name.toUpperCase().startsWith("Z3") &&
+  f.name.toLowerCase().endsWith(".csv")
+) {
+
+  html += `
+    <div class="gaz-group">
+      <button class="gaz-btn" disabled>⏱ Calcul...</button>
+    </div>
+  `;
+
+  gazTasks.push({ f, tdAction, type: "historique" });
+}
 
 
 
@@ -2375,8 +2371,17 @@ tr.appendChild(tdSize);
 
 // ✅ Lancer les calculs gaz avec limite de concurrence
 if (gazTasks.length) {
-  await runWithConcurrency(gazTasks, 6, computeGazForRow);
+  await runWithConcurrency(gazTasks, 6, async (task) => {
+    if (task.type === "historique") {
+      await computeHistoriqueForRow(task);
+    } else {
+      await computeGazForRow(task);
+    }
+  });
+
   updateGazTotals();
+}
+
 
 
   
@@ -3531,81 +3536,83 @@ async function runWithConcurrency(tasks, limit, worker) {
   await Promise.all([...executing]);
 }
 
-// ======================================================
-// === CALCUL TOTAL HISTORIQUE (Z3)
-// ======================================================
 
-async function computeHistoriqueTotal(files, btn){
 
-  let totalMinutes = 0;
+// =========================================
+// === Calcule durée cycle Historique (Z3)
+// =========================================
+async function computeHistoriqueForRow({ f, tdAction }) {
 
-  const z3Files = files.filter(f =>
-    f.name.toUpperCase().startsWith("Z3") &&
-    f.name.toLowerCase().endsWith(".csv")
-  );
+  startScan();
 
-  for (const f of z3Files){
+  try {
 
-    try{
-      const realId = getDriveFileId(f);
+    const realId = getDriveFileId(f);
+    const res = await fetch(
+      `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`
+    );
 
-      const res = await fetch(
-        `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`
-      );
+    if (!res.ok) return;
 
-      if (!res.ok) continue;
+    const text = await res.text();
+    const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
 
-      const text = await res.text();
-      const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
+    let totalMinutes = 0;
 
-      for (const line of lines.slice(3)){
+    for (const line of lines.slice(3)) {
 
-        const cols = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g);
-        if (!cols || cols.length < 5) continue;
+      const cols = line.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g);
+      if (!cols || cols.length < 5) continue;
 
-        const message = cols[2]
-          .replace(/""/g,'"')
-          .replace(/"/g,"")
-          .trim();
+      const message = cols[2]
+        .replace(/""/g,'"')
+        .replace(/"/g,"")
+        .trim();
 
-        if (message === 'Démarrage Cycle "Séchage avec brûleur"'){
+      if (message === 'Démarrage Cycle "Séchage avec brûleur"') {
 
-          const startTime = cols[1].replace(/"/g,"").trim();
-          const endTime   = cols[4].replace(/"/g,"").trim();
+        const startTime = cols[1].replace(/"/g,"").trim();
+        const endTime   = cols[4].replace(/"/g,"").trim();
 
-          if (!endTime) continue;
+        if (!endTime) continue;
 
-          const [h1,m1,s1] = startTime.split(":").map(Number);
-          const [h2,m2,s2] = endTime.split(":").map(Number);
+        const [h1,m1,s1] = startTime.split(":").map(Number);
+        const [h2,m2,s2] = endTime.split(":").map(Number);
 
-          let seconds =
-            (h2*3600 + m2*60 + s2) -
-            (h1*3600 + m1*60 + s1);
+        let seconds =
+          (h2*3600 + m2*60 + s2) -
+          (h1*3600 + m1*60 + s1);
 
-          if (seconds < 0) seconds += 24*3600;
+        if (seconds < 0) seconds += 24*3600;
 
-          totalMinutes += Math.floor(seconds / 60);
-        }
+        totalMinutes += Math.floor(seconds / 60);
       }
-
-    } catch(e){
-      console.warn("Erreur lecture Z3 :", f.name);
     }
+
+    const H = String(Math.floor(totalMinutes / 60)).padStart(2,"0");
+    const M = String(totalMinutes % 60).padStart(2,"0");
+
+    const btn = tdAction.querySelector(".gaz-btn");
+    if (!btn) return;
+
+    btn.textContent = `⏱ ${H}:${M}`;
+    btn.disabled = false;
+
+    // coloration douce comme durée gaz
+    btn.style.background = "linear-gradient(180deg, #bbdefb, #64b5f6)";
+    btn.style.color = "#0d47a1";
+    btn.style.minWidth = "120px";
+
+  } catch(e) {
+    console.warn("Erreur calcul Historique :", f.name);
+  } finally {
+    endScan();
   }
-
-  const H = String(Math.floor(totalMinutes / 60)).padStart(2,"0");
-  const M = String(totalMinutes % 60).padStart(2,"0");
-
-  btn.textContent = `⏱ ${H}:${M}`;
-
-  btn.style.background =
-    totalMinutes > 600
-      ? "linear-gradient(180deg,#ff8a65,#e64a19)"
-      : "linear-gradient(180deg,#bbdefb,#64b5f6)";
-
-  btn.style.color = "#fff";
 }
 
+
+
+  
 
 // ✅ évite le crash si #yearSelect n'existe plus
 function initYearSelect(){
