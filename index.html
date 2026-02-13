@@ -1216,33 +1216,7 @@ const url = `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}
 
         console.log("Nombre de lignes :", lines.length);
 
-        // === Nouveau parseur fiable ===
-        function parseCSV(line) {
-            const result = [];
-            let current = "";
-            let insideQuotes = false;
 
-            for (let i = 0; i < line.length; i++) {
-                const c = line[i];
-
-                if (c === '"' && line[i + 1] === '"') {
-                    current += '"';
-                    i++;
-                }
-                else if (c === '"') {
-                    insideQuotes = !insideQuotes;
-                }
-                else if (c === "," && !insideQuotes) {
-                    result.push(current);
-                    current = "";
-                }
-                else {
-                    current += c;
-                }
-            }
-            result.push(current);
-            return result;
-        }
 
         const header = parseCSV(lines[0]);
 
@@ -1910,7 +1884,8 @@ async function displayFiles(files, folderName){
   const tbody=document.querySelector('#csvTable tbody');
 
   // Reset total historique
-  historiqueDurations = [];
+  historiqueDurations = {};
+
   
   const downloadBtn=document.getElementById('downloadFolderBtn');
   tbody.innerHTML='';
@@ -3340,6 +3315,36 @@ document.getElementById("exportExcelGazBtn").addEventListener("click", function 
     XLSX.writeFile(wb, `export_gaz_${new Date().toISOString().slice(0,10)}.xlsx`);
 });
 
+// =========================================
+// === Parseur CSV global (utilisé partout)
+// =========================================
+function parseCSV(line) {
+  const result = [];
+  let current = "";
+  let insideQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+
+    if (c === '"' && line[i + 1] === '"') {
+      current += '"';
+      i++;
+    }
+    else if (c === '"') {
+      insideQuotes = !insideQuotes;
+    }
+    else if (c === "," && !insideQuotes) {
+      result.push(current);
+      current = "";
+    }
+    else {
+      current += c;
+    }
+  }
+
+  result.push(current);
+  return result;
+}
 
 
 // =========================================
@@ -4023,6 +4028,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
