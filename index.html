@@ -3539,20 +3539,21 @@ const total = Object.values(historiqueDurations)
     return;
   }
 
-  if (!btn) {
-    btn = document.createElement("button");
-    btn.id = "historiqueSumBtn";
-    btn.className = "gaz-btn";
-    btn.style.marginLeft = "10px";
+if (!btn) {
+  btn = document.createElement("button");
+  btn.id = "historiqueSumBtn";
+  btn.className = "gaz-total";   // 👈 même classe que Σ m3
+  btn.style.marginLeft = "10px";
 
-    const controls = document.querySelector(".controls");
-    controls.appendChild(btn);
-  }
+  const controls = document.querySelector(".controls");
+  controls.appendChild(btn);
+}
+
 
   const H = String(Math.floor(total / 60)).padStart(2,"0");
   const M = String(total % 60).padStart(2,"0");
 
-  btn.textContent = `Σ ⏱ ${H}:${M}`;
+  btn.textContent = `⏱ ${H}:${M}`;
 }
 
 
@@ -3960,6 +3961,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
