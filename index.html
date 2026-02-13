@@ -1791,7 +1791,21 @@ if (!hasCsv && subFolders.length > 0) {
 hideSiteTiles();
 showTable();
 
+// === Active bouton Historique si dossier = Historique ===
+const histBtn  = document.getElementById("calcHistoriqueBtn");
+const histTile = document.getElementById("historiqueDurationTile");
+
+if (folderName && folderName.toLowerCase().includes("historique")) {
+  histBtn.style.display = "inline-block";
+  histTile.style.display = "none";
+  histTile.textContent = "";
+} else {
+  histBtn.style.display = "none";
+  histTile.style.display = "none";
+}
+
 await displayFiles(displayableFiles, folderName);
+
 
 
 
@@ -3893,6 +3907,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
