@@ -809,15 +809,11 @@ body[data-theme="orange"] #smes-footer-bg {
   <button id="downloadFolderBtn">Télécharger le dossier</button>
   <button id="exportCsvBtn" style="display:none;" title="Voir les barres graphiques de consommation par jour">Graphique</button>
   <button id="exportExcelGazBtn" style="display:none;" title="Exporter les données en Excel (kWh, m³, durée, tonnage)">Export Excel</button>
-<button id="calcHistoriqueBtn" style="display:none;">
-  ⏱ Temps brûleur
-</button>
-
-<button id="historiqueDurationTile"
+  <button id="historiqueTotalBtn"
         class="gaz-btn"
-        style="display:none; min-width:120px;">
+        style="display:none;">
+  ⏱ --:--
 </button>
-
 
 </div>
 
@@ -1791,21 +1787,7 @@ if (!hasCsv && subFolders.length > 0) {
 hideSiteTiles();
 showTable();
 
-// === Active bouton Historique si dossier = Historique ===
-const histBtn  = document.getElementById("calcHistoriqueBtn");
-const histTile = document.getElementById("historiqueDurationTile");
-
-if (folderName && folderName.toLowerCase().includes("historique")) {
-  histBtn.style.display = "inline-block";
-  histTile.style.display = "none";
-  histTile.textContent = "";
-} else {
-  histBtn.style.display = "none";
-  histTile.style.display = "none";
-}
-
 await displayFiles(displayableFiles, folderName);
-
 
 
 
@@ -1987,24 +1969,20 @@ if (folderName.toLowerCase().includes("consommation gaz")) {
   if (existingSummary) existingSummary.remove();
 }
 
+// ======================================================
+// === MODE HISTORIQUE
+// ======================================================
 
-// === HISTORIQUE ===
-const histBtn  = document.getElementById("calcHistoriqueBtn");
-const histTile = document.getElementById("historiqueDurationTile");
+const histBtn = document.getElementById("historiqueTotalBtn");
 
-if (folderName && folderName.trim().toLowerCase() === "historique") {
+if (folderName.toLowerCase().includes("historique")) {
   histBtn.style.display = "inline-block";
-  histTile.style.display = "none";
-  histTile.textContent = "";
+  histBtn.textContent = "⏱ Calcul...";
+  await computeHistoriqueTotal(files, histBtn);
 } else {
   histBtn.style.display = "none";
-  histTile.style.display = "none";
 }
 
-
-
-
-  
 
 
 // 🔍 Prépare la liste des dates ayant un JSON "actif"
@@ -3554,41 +3532,25 @@ async function runWithConcurrency(tasks, limit, worker) {
 }
 
 // ======================================================
-// === HISTORIQUE : calcul durée brûleur
+// === CALCUL TOTAL HISTORIQUE (Z3)
 // ======================================================
 
-document.getElementById("calcHistoriqueBtn")
-.addEventListener("click", async function () {
-
-  const rows = Array.from(document.querySelectorAll("#csvTable tbody tr"))
-    .filter(r => r.style.display !== "none");
-
-  if (!rows.length) {
-    alert("Aucun fichier visible.");
-    return;
-  }
+async function computeHistoriqueTotal(files, btn){
 
   let totalMinutes = 0;
 
-  for (const row of rows) {
+  const z3Files = files.filter(f =>
+    f.name.toUpperCase().startsWith("Z3") &&
+    f.name.toLowerCase().endsWith(".csv")
+  );
 
-    const nameCell = row.cells[3];
-    if (!nameCell) continue;
+  for (const f of z3Files){
 
-    const fileName = nameCell.textContent.trim();
-
-    if (!fileName.toUpperCase().startsWith("Z3") ||
-        !fileName.toLowerCase().endsWith(".csv")) continue;
-
-    const fileObj = previewFiles.find(f => f.name === fileName);
-    if (!fileObj) continue;
-
-    const realId = fileObj._realId || fileObj.id;
-
-    try {
+    try{
+      const realId = getDriveFileId(f);
 
       const res = await fetch(
-        `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(fileName)}&site=Smes_Acces`
+        `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`
       );
 
       if (!res.ok) continue;
@@ -3596,14 +3558,17 @@ document.getElementById("calcHistoriqueBtn")
       const text = await res.text();
       const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
 
-      for (const line of lines.slice(3)) {
+      for (const line of lines.slice(3)){
 
         const cols = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g);
         if (!cols || cols.length < 5) continue;
 
-        const message = cols[2].replace(/""/g,'"').replace(/"/g,"").trim();
+        const message = cols[2]
+          .replace(/""/g,'"')
+          .replace(/"/g,"")
+          .trim();
 
-        if (message === 'Démarrage Cycle "Séchage avec brûleur"') {
+        if (message === 'Démarrage Cycle "Séchage avec brûleur"'){
 
           const startTime = cols[1].replace(/"/g,"").trim();
           const endTime   = cols[4].replace(/"/g,"").trim();
@@ -3623,32 +3588,23 @@ document.getElementById("calcHistoriqueBtn")
         }
       }
 
-    } catch (e) {
-      console.warn("Erreur lecture Z3 :", fileName);
+    } catch(e){
+      console.warn("Erreur lecture Z3 :", f.name);
     }
   }
 
   const H = String(Math.floor(totalMinutes / 60)).padStart(2,"0");
   const M = String(totalMinutes % 60).padStart(2,"0");
 
-  const tile = document.getElementById("historiqueDurationTile");
+  btn.textContent = `⏱ ${H}:${M}`;
 
-  tile.textContent = `⏱ ${H}:${M}`;
-  tile.style.display = "inline-block";
+  btn.style.background =
+    totalMinutes > 600
+      ? "linear-gradient(180deg,#ff8a65,#e64a19)"
+      : "linear-gradient(180deg,#bbdefb,#64b5f6)";
 
-  // couleur dynamique
-  if (totalMinutes > 600) {
-    tile.style.background = "linear-gradient(180deg,#ff8a65,#e64a19)";
-    tile.style.color = "#fff";
-  } else if (totalMinutes > 300) {
-    tile.style.background = "linear-gradient(180deg,#ffd54f,#ffb300)";
-    tile.style.color = "#3e2723";
-  } else {
-    tile.style.background = "linear-gradient(180deg,#bbdefb,#64b5f6)";
-    tile.style.color = "#0d47a1";
-  }
-
-});
+  btn.style.color = "#fff";
+}
 
 
 // ✅ évite le crash si #yearSelect n'existe plus
@@ -3898,45 +3854,5 @@ function clearBrowserCache() {
 }
 </script>
 
-
-
-
-
-
-
-
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
