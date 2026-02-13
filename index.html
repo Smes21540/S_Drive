@@ -955,8 +955,6 @@ const FLAME_THRESHOLD = 40.0;   // seuil déclencheur de la flamme 🔥
 let previewFiles = [], currentPreviewIndex = 0;
 let historiqueDurations = {};
 
-
-
 let filterStartDate="", filterEndDate="";
   let activeScans = 0;
 
@@ -1215,7 +1213,33 @@ const url = `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}
 
         console.log("Nombre de lignes :", lines.length);
 
+        // === Nouveau parseur fiable ===
+        function parseCSV(line) {
+            const result = [];
+            let current = "";
+            let insideQuotes = false;
 
+            for (let i = 0; i < line.length; i++) {
+                const c = line[i];
+
+                if (c === '"' && line[i + 1] === '"') {
+                    current += '"';
+                    i++;
+                }
+                else if (c === '"') {
+                    insideQuotes = !insideQuotes;
+                }
+                else if (c === "," && !insideQuotes) {
+                    result.push(current);
+                    current = "";
+                }
+                else {
+                    current += c;
+                }
+            }
+            result.push(current);
+            return result;
+        }
 
         const header = parseCSV(lines[0]);
 
@@ -1883,8 +1907,7 @@ async function displayFiles(files, folderName){
   const tbody=document.querySelector('#csvTable tbody');
 
   // Reset total historique
-  historiqueDurations = {};
-
+  historiqueDurations = [];
   
   const downloadBtn=document.getElementById('downloadFolderBtn');
   tbody.innerHTML='';
@@ -2353,17 +2376,8 @@ tr.appendChild(tdSize);
   }
 
 // ✅ Lancer les calculs gaz avec limite de concurrence
-// 🔥 TRI CHRONOLOGIQUE DES FICHIERS Z3
-gazTasks.sort((a,b)=>{
-  const da = a.f.name.match(/_(\d{8})/);
-  const db = b.f.name.match(/_(\d{8})/);
-  if (!da || !db) return 0;
-  return da[1].localeCompare(db[1]);
-});
-
 if (gazTasks.length) {
   await runWithConcurrency(gazTasks, 6, async (task) => {
-
     if (task.type === "historique") {
       await computeHistoriqueForRow(task);
     } else {
@@ -3314,36 +3328,6 @@ document.getElementById("exportExcelGazBtn").addEventListener("click", function 
     XLSX.writeFile(wb, `export_gaz_${new Date().toISOString().slice(0,10)}.xlsx`);
 });
 
-// =========================================
-// === Parseur CSV global (utilisé partout)
-// =========================================
-function parseCSV(line) {
-  const result = [];
-  let current = "";
-  let insideQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const c = line[i];
-
-    if (c === '"' && line[i + 1] === '"') {
-      current += '"';
-      i++;
-    }
-    else if (c === '"') {
-      insideQuotes = !insideQuotes;
-    }
-    else if (c === "," && !insideQuotes) {
-      result.push(current);
-      current = "";
-    }
-    else {
-      current += c;
-    }
-  }
-
-  result.push(current);
-  return result;
-}
 
 
 // =========================================
@@ -3502,118 +3486,6 @@ if (tonnage === null || !isFinite(tonnage)) {
     
 }
 
-// =========================================
-// === Calcule durée cycle Historique (Z3)
-// =========================================
-async function computeHistoriqueForRow({ f, tdAction }) {
-
-  startScan();
-
-  try {
-
-    const realId = getDriveFileId(f);
-
-    const res = await fetch(
-      `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`
-    );
-
-    if (!res.ok) return;
-
-    const text = await res.text();
-    const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
-
-    let totalMinutes = 0;
-    let cycleOuvert = false;
-let startTime = null;
-
-
-    for (const line of lines.slice(3)) {
-
-      const cols = parseCSV(line);
-      if (!cols || cols.length < 3) continue;
-
-      const message = cols[2].toLowerCase();
-      const time    = cols[1].trim();
-
-      // === DEMARRAGE ===
-      if (
-        message.includes("marrage cycle") &&
-        message.includes("chage avec br")
-      ) {
-
-if (!cycleOuvert) {
-  cycleOuvert = true;
-  startTime = time;
-}
-
-
-        continue;
-      }
-
-      // === FIN ===
-      if (
-        message.includes("fin de cycle") &&
-        message.includes("chage avec br")
-      ) {
-
-        if (cycleOuvert && startTime) {
-
-
-          const [h1,m1,s1] = startTime.split(":").map(Number);
-
-          const [h2,m2,s2] = time.split(":").map(Number);
-
-          let seconds =
-            (h2*3600 + m2*60 + s2) -
-            (h1*3600 + m1*60 + s1);
-
-          if (seconds < 0) seconds += 24*3600;
-
-          totalMinutes += Math.floor(seconds / 60);
-
-cycleOuvert = false;
-startTime = null;
-
-        }
-      }
-    }
-
-    // Cycle ouvert à la fin du fichier → jusqu'à minuit
-    if (cycleOuvert && startTime) {
-
-
-      const [h1,m1,s1] = historiqueStartGlobal.split(":").map(Number);
-
-      const startSeconds = h1*3600 + m1*60 + s1;
-      const endOfDaySeconds = 24*3600;
-
-      const seconds = endOfDaySeconds - startSeconds;
-
-      totalMinutes += Math.floor(seconds / 60);
-    }
-
-    const btn = tdAction.querySelector(".gaz-btn");
-    if (!btn) return;
-
-    if (totalMinutes === 0) {
-      btn.remove();
-      return;
-    }
-
-    historiqueDurations[f.name] = totalMinutes;
-
-    const H = String(Math.floor(totalMinutes / 60)).padStart(2,"0");
-    const M = String(totalMinutes % 60).padStart(2,"0");
-
-    btn.textContent = `⏱ ${H}:${M}`;
-    btn.disabled = false;
-
-  } catch(e) {
-    console.error("Erreur Historique :", f.name, e);
-  } finally {
-    endScan();
-  }
-}
 
 
 
@@ -3682,69 +3554,6 @@ if (!btn) {
   const M = String(total % 60).padStart(2,"0");
 
   btn.textContent = `⏱ ${H}:${M}`;
-
-let exportBtn = document.getElementById("historiqueExportBtn");
-
-if (!exportBtn) {
-  exportBtn = document.createElement("button");
-  exportBtn.id = "historiqueExportBtn";
-  exportBtn.className = "gaz-total";
-  exportBtn.style.marginLeft = "10px";
-  exportBtn.textContent = "Export Excel";
-
-  exportBtn.onclick = exportHistoriqueExcel;
-
-  const controls = document.querySelector(".controls");
-  controls.appendChild(exportBtn);
-}
-
-}
-
-function exportHistoriqueExcel() {
-
-  const data = Object.entries(historiqueDurations)
-    .map(([fileName, minutes]) => {
-
-      // Extraction date depuis Z3xxxxx_YYYYMMDD.csv
-      const match = fileName.match(/_(\d{8})/);
-
-      let formattedDate = "Date inconnue";
-
-      if (match) {
-        const raw = match[1]; // YYYYMMDD
-        const year  = raw.substring(0,4);
-        const month = raw.substring(4,6);
-        const day   = raw.substring(6,8);
-
-        formattedDate = `${day}/${month}/${year}`;
-      }
-
-      const H = Math.floor(minutes / 60);
-      const M = minutes % 60;
-
-      return {
-        "Date": formattedDate,
-        "Durée (minutes)": minutes,
-        "Durée (HH:MM)": 
-          String(H).padStart(2,"0") + ":" +
-          String(M).padStart(2,"0")
-      };
-    });
-
-  if (!data.length) return;
-
-  // Tri par date croissante
-  data.sort((a,b)=>{
-    const [d1,m1,y1] = a.Date.split("/");
-    const [d2,m2,y2] = b.Date.split("/");
-    return new Date(y1,m1-1,d1) - new Date(y2,m2-1,d2);
-  });
-
-  const worksheet = XLSX.utils.json_to_sheet(data);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Historique");
-
-  XLSX.writeFile(workbook, "Historique_Cycles.xlsx");
 }
 
 
@@ -3777,10 +3586,127 @@ async function runWithConcurrency(tasks, limit, worker) {
 
 
 
+// =========================================
+// === Calcule durée cycle Historique (Z3)
+// =========================================
+async function computeHistoriqueForRow({ f, tdAction }) {
+
+  startScan();
+
+  try {
+
+    const realId = getDriveFileId(f);
+    const res = await fetch(
+      `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`
+    );
+
+    if (!res.ok) return;
+
+    const text = await res.text();
+    const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
+
+    let totalMinutes = 0;
+
+// ===== Parseur CSV robuste =====
+function parseCSV(line) {
+  const result = [];
+  let current = "";
+  let insideQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+
+    if (c === '"' && line[i + 1] === '"') {
+      current += '"';
+      i++;
+    }
+    else if (c === '"') {
+      insideQuotes = !insideQuotes;
+    }
+    else if (c === "," && !insideQuotes) {
+      result.push(current);
+      current = "";
+    }
+    else {
+      current += c;
+    }
+  }
+
+  result.push(current);
+  return result;
+}
+
+// ===== Lecture des lignes Z3 =====
+for (const line of lines.slice(3)) {
+
+  const cols = parseCSV(line);
+  if (!cols || cols.length < 5) continue;
+
+  const message = cols[2].trim();
+
+
+const lower = message.toLowerCase();
+
+if (
+  lower.includes("marrage cycle") &&
+  lower.includes("chage avec br")
+)
+ {
+
+    const startTime = cols[1].trim();
+    const endTime   = cols[4].trim();
+
+    if (!endTime) continue;
+
+    const [h1,m1,s1] = startTime.split(":").map(Number);
+    const [h2,m2,s2] = endTime.split(":").map(Number);
+
+    let seconds =
+      (h2*3600 + m2*60 + s2) -
+      (h1*3600 + m1*60 + s1);
+
+    if (seconds < 0) seconds += 24*3600;
+
+    totalMinutes += Math.floor(seconds / 60);
+  }
+}
+
+
+const btn = tdAction.querySelector(".gaz-btn");
+if (!btn) return;
+
+// 👉 Si aucun cycle trouvé → on masque le bouton
+if (totalMinutes === 0) {
+  btn.remove();
+  return;
+}
+
+// 👉 On stocke la durée pour le total global
+if (Number.isFinite(totalMinutes) && totalMinutes > 0) {
+  historiqueDurations[f.id] = totalMinutes;
+
+}
 
 
 
+const H = String(Math.floor(totalMinutes / 60)).padStart(2,"0");
+const M = String(totalMinutes % 60).padStart(2,"0");
 
+btn.textContent = `⏱ ${H}:${M}`;
+btn.disabled = false;
+
+btn.style.background = "linear-gradient(180deg, #bbdefb, #64b5f6)";
+btn.style.color = "#0d47a1";
+btn.style.minWidth = "120px";
+
+
+  } catch(e) {
+    console.warn("Erreur calcul Historique :", f.name);
+} finally {
+  endScan();
+}
+
+}
 
 
 
@@ -4035,15 +3961,6 @@ function clearBrowserCache() {
 
 </body>
 </html>
-
-
-
-
-
-
-
-
-
 
 
 
