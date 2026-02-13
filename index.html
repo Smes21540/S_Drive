@@ -809,6 +809,16 @@ body[data-theme="orange"] #smes-footer-bg {
   <button id="downloadFolderBtn">Télécharger le dossier</button>
   <button id="exportCsvBtn" style="display:none;" title="Voir les barres graphiques de consommation par jour">Graphique</button>
   <button id="exportExcelGazBtn" style="display:none;" title="Exporter les données en Excel (kWh, m³, durée, tonnage)">Export Excel</button>
+<button id="calcHistoriqueBtn" style="display:none;">
+  ⏱ Temps brûleur
+</button>
+
+<button id="historiqueDurationTile"
+        class="gaz-btn"
+        style="display:none; min-width:120px;">
+</button>
+
+
 </div>
 
 <!-- ✅ Tuiles dossiers (page principale) -->
@@ -1964,6 +1974,22 @@ if (folderName.toLowerCase().includes("consommation gaz")) {
 }
 
 
+// === HISTORIQUE ===
+const histBtn  = document.getElementById("calcHistoriqueBtn");
+const histTile = document.getElementById("historiqueDurationTile");
+
+if (folderName.toLowerCase().includes("historique")) {
+  histBtn.style.display = "inline-block";
+  histTile.style.display = "none";
+  histTile.textContent = "";
+} else {
+  histBtn.style.display = "none";
+  histTile.style.display = "none";
+}
+
+
+
+  
 
 
 // 🔍 Prépare la liste des dates ayant un JSON "actif"
@@ -3512,6 +3538,102 @@ async function runWithConcurrency(tasks, limit, worker) {
   await Promise.all([...executing]);
 }
 
+// ======================================================
+// === HISTORIQUE : calcul durée brûleur
+// ======================================================
+
+document.getElementById("calcHistoriqueBtn")
+.addEventListener("click", async function () {
+
+  const rows = Array.from(document.querySelectorAll("#csvTable tbody tr"))
+    .filter(r => r.style.display !== "none");
+
+  if (!rows.length) {
+    alert("Aucun fichier visible.");
+    return;
+  }
+
+  let totalMinutes = 0;
+
+  for (const row of rows) {
+
+    const nameCell = row.cells[3];
+    if (!nameCell) continue;
+
+    const fileName = nameCell.textContent.trim();
+
+    if (!fileName.toUpperCase().startsWith("Z3") ||
+        !fileName.toLowerCase().endsWith(".csv")) continue;
+
+    const fileObj = previewFiles.find(f => f.name === fileName);
+    if (!fileObj) continue;
+
+    const realId = fileObj._realId || fileObj.id;
+
+    try {
+
+      const res = await fetch(
+        `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(fileName)}&site=Smes_Acces`
+      );
+
+      if (!res.ok) continue;
+
+      const text = await res.text();
+      const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
+
+      for (const line of lines.slice(3)) {
+
+        const cols = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g);
+        if (!cols || cols.length < 5) continue;
+
+        const message = cols[2].replace(/""/g,'"').replace(/"/g,"").trim();
+
+        if (message === 'Démarrage Cycle "Séchage avec brûleur"') {
+
+          const startTime = cols[1].replace(/"/g,"").trim();
+          const endTime   = cols[4].replace(/"/g,"").trim();
+
+          if (!endTime) continue;
+
+          const [h1,m1,s1] = startTime.split(":").map(Number);
+          const [h2,m2,s2] = endTime.split(":").map(Number);
+
+          let seconds =
+            (h2*3600 + m2*60 + s2) -
+            (h1*3600 + m1*60 + s1);
+
+          if (seconds < 0) seconds += 24*3600;
+
+          totalMinutes += Math.floor(seconds / 60);
+        }
+      }
+
+    } catch (e) {
+      console.warn("Erreur lecture Z3 :", fileName);
+    }
+  }
+
+  const H = String(Math.floor(totalMinutes / 60)).padStart(2,"0");
+  const M = String(totalMinutes % 60).padStart(2,"0");
+
+  const tile = document.getElementById("historiqueDurationTile");
+
+  tile.textContent = `⏱ ${H}:${M}`;
+  tile.style.display = "inline-block";
+
+  // couleur dynamique
+  if (totalMinutes > 600) {
+    tile.style.background = "linear-gradient(180deg,#ff8a65,#e64a19)";
+    tile.style.color = "#fff";
+  } else if (totalMinutes > 300) {
+    tile.style.background = "linear-gradient(180deg,#ffd54f,#ffb300)";
+    tile.style.color = "#3e2723";
+  } else {
+    tile.style.background = "linear-gradient(180deg,#bbdefb,#64b5f6)";
+    tile.style.color = "#0d47a1";
+  }
+
+});
 
 
 // ✅ évite le crash si #yearSelect n'existe plus
@@ -3770,6 +3892,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
