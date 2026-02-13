@@ -1978,7 +1978,7 @@ if (folderName.toLowerCase().includes("consommation gaz")) {
 const histBtn  = document.getElementById("calcHistoriqueBtn");
 const histTile = document.getElementById("historiqueDurationTile");
 
-if (folderName.toLowerCase().includes("historique")) {
+if (folderName && folderName.trim().toLowerCase() === "historique") {
   histBtn.style.display = "inline-block";
   histTile.style.display = "none";
   histTile.textContent = "";
@@ -1986,6 +1986,7 @@ if (folderName.toLowerCase().includes("historique")) {
   histBtn.style.display = "none";
   histTile.style.display = "none";
 }
+
 
 
 
@@ -3892,6 +3893,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
