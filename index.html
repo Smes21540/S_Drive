@@ -953,6 +953,7 @@ const FLAME_THRESHOLD = 40.0;   // seuil déclencheur de la flamme 🔥
 
 /* ----------- État ----------- */
 let previewFiles = [], currentPreviewIndex = 0;
+let historiqueDurations = [];
 let filterStartDate="", filterEndDate="";
   let activeScans = 0;
 
@@ -1903,6 +1904,10 @@ async function displayFiles(files, folderName){
 
 
   const tbody=document.querySelector('#csvTable tbody');
+
+  // Reset total historique
+  historiqueDurations = [];
+  
   const downloadBtn=document.getElementById('downloadFolderBtn');
   tbody.innerHTML='';
 
@@ -2379,7 +2384,9 @@ if (gazTasks.length) {
     }
   });
 
-  updateGazTotals();
+    updateGazTotals();
+  updateHistoriqueTotals();
+
 }
 
 
@@ -3490,6 +3497,9 @@ function updateGazTotals() {
   let totalM3 = 0;
   let totalKwh = 0;
 
+
+  
+
 document.querySelectorAll("#csvTable tbody tr").forEach(tr => {
   if (tr.style.display === "none") return;  // ne compte pas les lignes filtrées
   const group = tr.querySelector(".gaz-group");
@@ -3511,6 +3521,38 @@ document.querySelectorAll("#csvTable tbody tr").forEach(tr => {
   totalKwhSpan.textContent = `kWh total: ${Math.round(totalKwh).toLocaleString("fr-FR")}`;
 }
 
+
+function updateHistoriqueTotals() {
+
+  const total = historiqueDurations
+    .reduce((sum, val) => sum + val, 0);
+
+  let btn = document.getElementById("historiqueSumBtn");
+
+  if (total === 0) {
+    if (btn) btn.remove();
+    return;
+  }
+
+  if (!btn) {
+    btn = document.createElement("button");
+    btn.id = "historiqueSumBtn";
+    btn.className = "gaz-btn";
+    btn.style.marginLeft = "10px";
+
+    const controls = document.querySelector(".controls");
+    controls.appendChild(btn);
+  }
+
+  const H = String(Math.floor(total / 60)).padStart(2,"0");
+  const M = String(total % 60).padStart(2,"0");
+
+  btn.textContent = `Σ ⏱ ${H}:${M}`;
+}
+
+
+
+  
 // === Limiteur de concurrence (évite 200 fetch en même temps) ===
 async function runWithConcurrency(tasks, limit, worker) {
   let i = 0;
@@ -3633,6 +3675,10 @@ if (totalMinutes === 0) {
   return;
 }
 
+// 👉 On stocke la durée pour le total global
+historiqueDurations.push(totalMinutes);
+
+
 const H = String(Math.floor(totalMinutes / 60)).padStart(2,"0");
 const M = String(totalMinutes % 60).padStart(2,"0");
 
@@ -3646,9 +3692,10 @@ btn.style.minWidth = "120px";
 
   } catch(e) {
     console.warn("Erreur calcul Historique :", f.name);
-  } finally {
-    endScan();
-  }
+} finally {
+  endScan();
+}
+
 }
 
 
@@ -3904,6 +3951,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
