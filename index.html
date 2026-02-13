@@ -3595,6 +3595,7 @@ for (const line of lines.slice(3)) {
   if (!cols || cols.length < 5) continue;
 
   const message = cols[2].trim();
+console.log("MESSAGE RAW =", message);
 
   if (
     message.includes("Démarrage Cycle") &&
@@ -3894,6 +3895,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
