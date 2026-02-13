@@ -3624,19 +3624,25 @@ if (
 }
 
 
-    const H = String(Math.floor(totalMinutes / 60)).padStart(2,"0");
-    const M = String(totalMinutes % 60).padStart(2,"0");
+const btn = tdAction.querySelector(".gaz-btn");
+if (!btn) return;
 
-    const btn = tdAction.querySelector(".gaz-btn");
-    if (!btn) return;
+// 👉 Si aucun cycle trouvé → on masque le bouton
+if (totalMinutes === 0) {
+  btn.remove();
+  return;
+}
 
-    btn.textContent = `⏱ ${H}:${M}`;
-    btn.disabled = false;
+const H = String(Math.floor(totalMinutes / 60)).padStart(2,"0");
+const M = String(totalMinutes % 60).padStart(2,"0");
 
-    // coloration douce comme durée gaz
-    btn.style.background = "linear-gradient(180deg, #bbdefb, #64b5f6)";
-    btn.style.color = "#0d47a1";
-    btn.style.minWidth = "120px";
+btn.textContent = `⏱ ${H}:${M}`;
+btn.disabled = false;
+
+btn.style.background = "linear-gradient(180deg, #bbdefb, #64b5f6)";
+btn.style.color = "#0d47a1";
+btn.style.minWidth = "120px";
+
 
   } catch(e) {
     console.warn("Erreur calcul Historique :", f.name);
@@ -3898,6 +3904,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
