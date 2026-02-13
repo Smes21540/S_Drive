@@ -3554,6 +3554,69 @@ if (!btn) {
   const M = String(total % 60).padStart(2,"0");
 
   btn.textContent = `⏱ ${H}:${M}`;
+
+let exportBtn = document.getElementById("historiqueExportBtn");
+
+if (!exportBtn) {
+  exportBtn = document.createElement("button");
+  exportBtn.id = "historiqueExportBtn";
+  exportBtn.className = "gaz-total";
+  exportBtn.style.marginLeft = "10px";
+  exportBtn.textContent = "Export Excel";
+
+  exportBtn.onclick = exportHistoriqueExcel;
+
+  const controls = document.querySelector(".controls");
+  controls.appendChild(exportBtn);
+}
+
+}
+
+function exportHistoriqueExcel() {
+
+  const data = Object.entries(historiqueDurations)
+    .map(([fileName, minutes]) => {
+
+      // Extraction date depuis Z3xxxxx_YYYYMMDD.csv
+      const match = fileName.match(/_(\d{8})/);
+
+      let formattedDate = "Date inconnue";
+
+      if (match) {
+        const raw = match[1]; // YYYYMMDD
+        const year  = raw.substring(0,4);
+        const month = raw.substring(4,6);
+        const day   = raw.substring(6,8);
+
+        formattedDate = `${day}/${month}/${year}`;
+      }
+
+      const H = Math.floor(minutes / 60);
+      const M = minutes % 60;
+
+      return {
+        "Date": formattedDate,
+        "Durée (minutes)": minutes,
+        "Durée (HH:MM)": 
+          String(H).padStart(2,"0") + ":" +
+          String(M).padStart(2,"0")
+      };
+    });
+
+  if (!data.length) return;
+
+  // Tri par date croissante
+  data.sort((a,b)=>{
+    const [d1,m1,y1] = a.Date.split("/");
+    const [d2,m2,y2] = b.Date.split("/");
+    return new Date(y1,m1-1,d1) - new Date(y2,m2-1,d2);
+  });
+
+  const worksheet = XLSX.utils.json_to_sheet(data);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Historique");
+
+  XLSX.writeFile(workbook, "Historique_Cycles.xlsx");
 }
 
 
@@ -3961,6 +4024,8 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
+
 
 
 
