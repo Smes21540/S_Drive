@@ -3524,8 +3524,12 @@ document.querySelectorAll("#csvTable tbody tr").forEach(tr => {
 
 function updateHistoriqueTotals() {
 
+  console.log("Historique durations:", historiqueDurations);
+
   const total = historiqueDurations
+    .filter(Number.isFinite)
     .reduce((sum, val) => sum + val, 0);
+
 
   let btn = document.getElementById("historiqueSumBtn");
 
@@ -3676,7 +3680,10 @@ if (totalMinutes === 0) {
 }
 
 // 👉 On stocke la durée pour le total global
-historiqueDurations.push(totalMinutes);
+if (Number.isFinite(totalMinutes) && totalMinutes > 0) {
+  historiqueDurations.push(totalMinutes);
+}
+
 
 
 const H = String(Math.floor(totalMinutes / 60)).padStart(2,"0");
@@ -3951,6 +3958,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
