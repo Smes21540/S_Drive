@@ -3569,8 +3569,14 @@ async function computeHistoriqueForRow({ f, tdAction }) {
         .replace(/"/g,"")
         .trim();
 
-      if (message === 'Démarrage Cycle "Séchage avec brûleur"') {
+      if (message.includes("Démarrage Cycle") &&
+    message.includes("Séchage avec brûleur"))
+ {
 
+console.log("MESSAGE:", message);
+console.log("START:", cols[1], "END:", cols[4]);
+
+   
         const startTime = cols[1].replace(/"/g,"").trim();
         const endTime   = cols[4].replace(/"/g,"").trim();
 
@@ -3863,4 +3869,5 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
