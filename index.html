@@ -3559,41 +3559,66 @@ async function computeHistoriqueForRow({ f, tdAction }) {
 
     let totalMinutes = 0;
 
-    for (const line of lines.slice(3)) {
+// ===== Parseur CSV robuste =====
+function parseCSV(line) {
+  const result = [];
+  let current = "";
+  let insideQuotes = false;
 
-      const cols = line.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g);
-      if (!cols || cols.length < 5) continue;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
 
-      const message = cols[2]
-        .replace(/""/g,'"')
-        .replace(/"/g,"")
-        .trim();
-
-      if (message.includes("Démarrage Cycle") &&
-    message.includes("Séchage avec brûleur"))
- {
-
-console.log("MESSAGE:", message);
-console.log("START:", cols[1], "END:", cols[4]);
-
-   
-        const startTime = cols[1].replace(/"/g,"").trim();
-        const endTime   = cols[4].replace(/"/g,"").trim();
-
-        if (!endTime) continue;
-
-        const [h1,m1,s1] = startTime.split(":").map(Number);
-        const [h2,m2,s2] = endTime.split(":").map(Number);
-
-        let seconds =
-          (h2*3600 + m2*60 + s2) -
-          (h1*3600 + m1*60 + s1);
-
-        if (seconds < 0) seconds += 24*3600;
-
-        totalMinutes += Math.floor(seconds / 60);
-      }
+    if (c === '"' && line[i + 1] === '"') {
+      current += '"';
+      i++;
     }
+    else if (c === '"') {
+      insideQuotes = !insideQuotes;
+    }
+    else if (c === "," && !insideQuotes) {
+      result.push(current);
+      current = "";
+    }
+    else {
+      current += c;
+    }
+  }
+
+  result.push(current);
+  return result;
+}
+
+// ===== Lecture des lignes Z3 =====
+for (const line of lines.slice(3)) {
+
+  const cols = parseCSV(line);
+  if (!cols || cols.length < 5) continue;
+
+  const message = cols[2].trim();
+
+  if (
+    message.includes("Démarrage Cycle") &&
+    message.includes("Séchage avec brûleur")
+  ) {
+
+    const startTime = cols[1].trim();
+    const endTime   = cols[4].trim();
+
+    if (!endTime) continue;
+
+    const [h1,m1,s1] = startTime.split(":").map(Number);
+    const [h2,m2,s2] = endTime.split(":").map(Number);
+
+    let seconds =
+      (h2*3600 + m2*60 + s2) -
+      (h1*3600 + m1*60 + s1);
+
+    if (seconds < 0) seconds += 24*3600;
+
+    totalMinutes += Math.floor(seconds / 60);
+  }
+}
+
 
     const H = String(Math.floor(totalMinutes / 60)).padStart(2,"0");
     const M = String(totalMinutes % 60).padStart(2,"0");
@@ -3869,5 +3894,6 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
