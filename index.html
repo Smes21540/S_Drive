@@ -954,6 +954,9 @@ const FLAME_THRESHOLD = 40.0;   // seuil déclencheur de la flamme 🔥
 /* ----------- État ----------- */
 let previewFiles = [], currentPreviewIndex = 0;
 let historiqueDurations = {};
+  let historiqueCycleOuvert = false;
+let historiqueStartGlobal = null;
+
 
 let filterStartDate="", filterEndDate="";
   let activeScans = 0;
@@ -2376,8 +2379,17 @@ tr.appendChild(tdSize);
   }
 
 // ✅ Lancer les calculs gaz avec limite de concurrence
+// 🔥 TRI CHRONOLOGIQUE DES FICHIERS Z3
+gazTasks.sort((a,b)=>{
+  const da = a.f.name.match(/_(\d{8})/);
+  const db = b.f.name.match(/_(\d{8})/);
+  if (!da || !db) return 0;
+  return da[1].localeCompare(db[1]);
+});
+
 if (gazTasks.length) {
   await runWithConcurrency(gazTasks, 6, async (task) => {
+
     if (task.type === "historique") {
       await computeHistoriqueForRow(task);
     } else {
@@ -3652,23 +3664,7 @@ async function runWithConcurrency(tasks, limit, worker) {
 // =========================================
 // === Calcule durée cycle Historique (Z3)
 // =========================================
-async function computeHistoriqueForRow({ f, tdAction }) {
-
-  startScan();
-
-  try {
-
-    const realId = getDriveFileId(f);
-    const res = await fetch(
-      `https://smes21540.netlify.app/.netlify/functions/drive?id=${realId}&name=${encodeURIComponent(f.name)}&site=Smes_Acces`
-    );
-
-    if (!res.ok) return;
-
-    const text = await res.text();
-    const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
-
-    let totalMinutes = 0;
+let totalMinutes = 0;
 
 // ===== Parseur CSV robuste =====
 function parseCSV(line) {
@@ -3705,35 +3701,67 @@ for (const line of lines.slice(3)) {
   const cols = parseCSV(line);
   if (!cols || cols.length < 5) continue;
 
-  const message = cols[2].trim();
+  const message = cols[2].toLowerCase();
+  const time    = cols[1].trim();
 
+  // === DÉMARRAGE ===
+  if (
+    message.includes("marrage cycle") &&
+    message.includes("chage avec br")
+  ) {
 
-const lower = message.toLowerCase();
+    if (!historiqueCycleOuvert) {
+      historiqueCycleOuvert = true;
+      historiqueStartGlobal = time;
+    }
 
-if (
-  lower.includes("marrage cycle") &&
-  lower.includes("chage avec br")
-)
- {
+    continue;
+  }
 
-    const startTime = cols[1].trim();
-    const endTime   = cols[4].trim();
+  // === FIN DE CYCLE ===
+  if (
+    message.includes("fin de cycle") &&
+    message.includes("chage avec br")
+  ) {
 
-    if (!endTime) continue;
+    if (historiqueCycleOuvert && historiqueStartGlobal) {
 
-    const [h1,m1,s1] = startTime.split(":").map(Number);
-    const [h2,m2,s2] = endTime.split(":").map(Number);
+      const [h1,m1,s1] = historiqueStartGlobal.split(":").map(Number);
+      const [h2,m2,s2] = time.split(":").map(Number);
 
-    let seconds =
-      (h2*3600 + m2*60 + s2) -
-      (h1*3600 + m1*60 + s1);
+      let seconds =
+        (h2*3600 + m2*60 + s2) -
+        (h1*3600 + m1*60 + s1);
 
-    if (seconds < 0) seconds += 24*3600;
+      if (seconds < 0) seconds += 24*3600;
 
-    totalMinutes += Math.floor(seconds / 60);
+      totalMinutes += Math.floor(seconds / 60);
+
+      historiqueCycleOuvert = false;
+      historiqueStartGlobal = null;
+    }
   }
 }
 
+// === Fin de fichier : cycle toujours ouvert ? ===
+if (historiqueCycleOuvert && historiqueStartGlobal) {
+
+  const [h1,m1,s1] = historiqueStartGlobal.split(":").map(Number);
+
+  const startSeconds = h1*3600 + m1*60 + s1;
+  const endOfDaySeconds = 24*3600;
+
+  const seconds = endOfDaySeconds - startSeconds;
+
+  totalMinutes += Math.floor(seconds / 60);
+
+  // IMPORTANT : on ne ferme PAS le cycle ici
+  // il continue sur le fichier suivant
+}
+
+
+
+    
 
 const btn = tdAction.querySelector(".gaz-btn");
 if (!btn) return;
@@ -4024,6 +4052,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
