@@ -3597,7 +3597,7 @@ async function computeHistoriqueForRow({ f, tdAction }) {
     btn.disabled = false;
 
   } catch(e) {
-    console.warn("Erreur Historique :", f.name);
+    console.error("Erreur Historique :", f.name, e);
   } finally {
     endScan();
   }
@@ -4023,6 +4023,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
