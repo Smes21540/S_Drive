@@ -953,7 +953,8 @@ const FLAME_THRESHOLD = 40.0;   // seuil déclencheur de la flamme 🔥
 
 /* ----------- État ----------- */
 let previewFiles = [], currentPreviewIndex = 0;
-let historiqueDurations = [];
+let historiqueDurations = {};
+
 let filterStartDate="", filterEndDate="";
   let activeScans = 0;
 
@@ -3526,9 +3527,9 @@ function updateHistoriqueTotals() {
 
   console.log("Historique durations:", historiqueDurations);
 
-  const total = historiqueDurations
-    .filter(Number.isFinite)
-    .reduce((sum, val) => sum + val, 0);
+const total = Object.values(historiqueDurations)
+  .filter(Number.isFinite)
+  .reduce((sum, val) => sum + val, 0);
 
 
   let btn = document.getElementById("historiqueSumBtn");
@@ -3681,7 +3682,8 @@ if (totalMinutes === 0) {
 
 // 👉 On stocke la durée pour le total global
 if (Number.isFinite(totalMinutes) && totalMinutes > 0) {
-  historiqueDurations.push(totalMinutes);
+  historiqueDurations[f.id] = totalMinutes;
+
 }
 
 
@@ -3958,6 +3960,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
