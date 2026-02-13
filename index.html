@@ -3554,8 +3554,49 @@ if (!btn) {
   const M = String(total % 60).padStart(2,"0");
 
   btn.textContent = `⏱ ${H}:${M}`;
+
+let exportBtn = document.getElementById("historiqueExportBtn");
+
+if (!exportBtn) {
+  exportBtn = document.createElement("button");
+  exportBtn.id = "historiqueExportBtn";
+  exportBtn.className = "gaz-total";
+  exportBtn.style.marginLeft = "10px";
+  exportBtn.textContent = "Export ⬇";
+
+  exportBtn.onclick = exportHistoriqueExcel;
+
+  const controls = document.querySelector(".controls");
+  controls.appendChild(exportBtn);
 }
 
+}
+
+function exportHistoriqueExcel() {
+
+  const data = Object.entries(historiqueDurations)
+    .map(([id, minutes]) => {
+
+      const H = Math.floor(minutes / 60);
+      const M = minutes % 60;
+
+      return {
+        "Fichier": id,
+        "Durée (minutes)": minutes,
+        "Durée (HH:MM)": 
+          String(H).padStart(2,"0") + ":" +
+          String(M).padStart(2,"0")
+      };
+    });
+
+  if (!data.length) return;
+
+  const worksheet = XLSX.utils.json_to_sheet(data);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Historique");
+
+  XLSX.writeFile(workbook, "Historique_Cycles.xlsx");
+}
 
 
   
@@ -3961,6 +4002,7 @@ function clearBrowserCache() {
 
 </body>
 </html>
+
 
 
 
